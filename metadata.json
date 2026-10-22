@@ -1,0 +1,6 @@
+{
+  "name": "ChronoTask Kanban & Gantt",
+  "description": "Gestor móvil multitableto con Kanban, diagrama de Gantt, semáforo de tiempo en 5 niveles, estado en espera automático, historial y notificaciones programadas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

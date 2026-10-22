@@ -1,0 +1,81 @@
+name: Compilar APK Android y Publicar Release
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  PUBLIC_APK_DOWNLOAD_URL: "https://github.com/${{ github.repository }}/releases/latest/download/app-release.apk"
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Clonar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias
+        run: npm install
+
+      # Se inyecta el número de ejecución como versión de la app
+      - name: Compilar frontend web (Vite)
+        env:
+          VITE_GITHUB_REPO: ${{ github.repository }}
+          VITE_APP_VERSION: 1.0.${{ github.run_number }}
+          VITE_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest/download/app-release.apk
+        run: npm run build
+
+      - name: Sincronizar Capacitor con Android
+        run: npx cap sync android
+
+      - name: Permisos de ejecución a Gradle
+        run: chmod +x android/gradlew
+
+      - name: Generar Keystore de firma automática si no existe
+        run: |
+          if [ ! -f android/app/release.keystore ]; then
+            keytool -genkey -v -keystore android/app/release.keystore -alias chronotask -keyalg RSA -keysize 2048 -validity 10000 -storepass chronotask -keypass chronotask -dname "CN=ChronoTask, OU=Mobile, O=ChronoTask, L=City, S=State, C=US"
+          fi
+
+      - name: Compilar APK Firmado
+        run: |
+          cd android
+          ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }} --stacktrace
+
+      - name: Renombrar y preparar APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/ChronoTask-v1.0.${{ github.run_number }}.apk
+
+      # Publicación automática del Release en GitHub
+      - name: Publicar Release en GitHub
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "ChronoTask v1.0.${{ github.run_number }}"
+          body: |
+            ## 📱 ChronoTask v1.0.${{ github.run_number }}
+            👉 [Descargar app-release.apk](https://github.com/${{ github.repository }}/releases/latest/download/app-release.apk)
+          draft: false
+          prerelease: false
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/ChronoTask-v1.0.${{ github.run_number }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
