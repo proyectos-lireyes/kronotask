@@ -8,14 +8,12 @@ import {
   Github,
   Smartphone,
   ExternalLink,
-  Save,
 } from 'lucide-react';
 import {
   APP_CURRENT_VERSION,
+  FIXED_GITHUB_REPO,
   checkGitHubRelease,
   startApkUpdate,
-  getStoredGitHubRepo,
-  saveStoredGitHubRepo,
   ReleaseInfo,
 } from '../services/updateService';
 
@@ -25,8 +23,6 @@ interface AppUpdateModalProps {
 }
 
 export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose }) => {
-  const [repo, setRepo] = useState(getStoredGitHubRepo());
-  const [isEditingRepo, setIsEditingRepo] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -49,19 +45,13 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const info = await checkGitHubRelease(repo);
+      const info = await checkGitHubRelease(FIXED_GITHUB_REPO);
       setReleaseInfo(info);
     } catch (err: any) {
       setErrorMessage(err.message || 'No se pudo verificar actualizaciones.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleSaveRepo = () => {
-    saveStoredGitHubRepo(repo);
-    setIsEditingRepo(false);
-    handleCheckUpdates();
   };
 
   const handleDownloadAndInstall = async () => {
@@ -96,7 +86,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
               <Smartphone className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800">Actualizaciones de ChronoTask</h3>
+              <h3 className="text-sm font-bold text-slate-800">Actualizaciones de KronoTask</h3>
               <p className="text-[11px] text-slate-500">Compilación APK & GitHub Releases</p>
             </div>
           </div>
@@ -111,7 +101,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
 
         {/* Content */}
         <div className="p-4 space-y-4 overflow-y-auto">
-          {/* Current Version Pill */}
+          {/* Current Version Card */}
           <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
@@ -130,47 +120,29 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
             </button>
           </div>
 
-          {/* GitHub Repo Configuration */}
-          <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200 space-y-2">
+          {/* Fixed GitHub Repository Display */}
+          <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200 space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
                 <Github className="w-3.5 h-3.5 text-slate-800" />
-                Repositorio GitHub CI/CD:
+                Repositorio Oficial CI/CD:
               </label>
-              {!isEditingRepo ? (
-                <button
-                  type="button"
-                  onClick={() => setIsEditingRepo(true)}
-                  className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
-                >
-                  Cambiar
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSaveRepo}
-                  className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
-                >
-                  <Save className="w-3 h-3" /> Guardar
-                </button>
-              )}
+              <a
+                href={`https://github.com/${FIXED_GITHUB_REPO}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-semibold text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <span>Ver repo</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
-
-            {isEditingRepo ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={repo}
-                  onChange={(e) => setRepo(e.target.value)}
-                  placeholder="usuario/nombre-del-repo"
-                  className="flex-1 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                />
-              </div>
-            ) : (
-              <p className="text-xs font-mono text-slate-600 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/80 truncate">
-                {repo}
+            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <p className="text-xs font-mono font-bold text-slate-800 truncate">
+                {FIXED_GITHUB_REPO}
               </p>
-            )}
+            </div>
           </div>
 
           {/* Error Message */}
@@ -179,9 +151,6 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{errorMessage}</p>
-                <p className="text-[11px] text-amber-700 mt-1">
-                  Asegúrate de que tu repositorio tenga GitHub Actions configurado con el workflow y al menos un release publicado.
-                </p>
               </div>
             </div>
           )}
@@ -200,7 +169,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
                 />
               </div>
               {totalBytes > 0 && (
-                <p className="text-[10px] text-blue-700 text-right">
+                <p className="text-[10px] text-blue-700 text-right font-mono">
                   {(downloadedBytes / (1024 * 1024)).toFixed(1)} MB / {(totalBytes / (1024 * 1024)).toFixed(1)} MB
                 </p>
               )}
@@ -211,7 +180,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
           {downloadSuccess && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>APK descargado correctamente. Iniciando instalador de Android...</span>
+              <span>APK descargado con éxito. Iniciando instalador de Android...</span>
             </div>
           )}
 
@@ -242,11 +211,11 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
                 </div>
 
                 <a
-                  href={`https://github.com/${repo}/releases`}
+                  href={`https://github.com/${FIXED_GITHUB_REPO}/releases`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200/60"
-                  title="Ver en GitHub"
+                  title="Ver releases en GitHub"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
@@ -271,7 +240,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
               ) : (
                 <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-700 py-1">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Tienes la versión más reciente instalada.</span>
+                  <span>Tienes instalada la versión más reciente.</span>
                 </div>
               )}
             </div>

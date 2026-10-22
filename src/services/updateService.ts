@@ -15,25 +15,7 @@ export interface AppUpdaterPluginInterface {
 export const AppUpdater = registerPlugin<AppUpdaterPluginInterface>('AppUpdater');
 
 export const APP_CURRENT_VERSION = (import.meta as any).env?.VITE_APP_VERSION || '1.0.0';
-const DEFAULT_FALLBACK_REPO = (import.meta as any).env?.VITE_GITHUB_REPO || 'lissandro545/chronotask';
-
-const GITHUB_REPO_STORAGE_KEY = 'chronotask_github_repo';
-
-export function getStoredGitHubRepo(): string {
-  try {
-    return localStorage.getItem(GITHUB_REPO_STORAGE_KEY) || DEFAULT_FALLBACK_REPO;
-  } catch {
-    return DEFAULT_FALLBACK_REPO;
-  }
-}
-
-export function saveStoredGitHubRepo(repo: string): void {
-  try {
-    localStorage.setItem(GITHUB_REPO_STORAGE_KEY, repo.trim());
-  } catch {
-    // ignore
-  }
-}
+export const FIXED_GITHUB_REPO = 'proyectos-lireyes/kronotask';
 
 export function compareVersions(v1: string, v2: string): number {
   const cleanV1 = v1.replace(/^v/i, '').split('.').map((p) => parseInt(p, 10) || 0);
@@ -60,11 +42,8 @@ export interface ReleaseInfo {
   releaseName?: string;
 }
 
-export async function checkGitHubRelease(repo = getStoredGitHubRepo()): Promise<ReleaseInfo> {
+export async function checkGitHubRelease(repo = FIXED_GITHUB_REPO): Promise<ReleaseInfo> {
   const cleanRepo = repo.replace(/^https?:\/\/github\.com\//i, '').replace(/\/$/, '').trim();
-  if (!cleanRepo || !cleanRepo.includes('/')) {
-    throw new Error('Formato de repositorio inválido. Use "usuario/repositorio".');
-  }
 
   const response = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, {
     headers: { Accept: 'application/vnd.github.v3+json' },
@@ -72,7 +51,7 @@ export async function checkGitHubRelease(repo = getStoredGitHubRepo()): Promise<
 
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error(`No se encontraron releases en "${cleanRepo}". Publica un release en GitHub para habilitar actualizaciones.`);
+      throw new Error(`Aún no hay ningún release publicado en "${cleanRepo}". Al hacer push a GitHub, la acción CI/CD creará el primer release automáticamente.`);
     }
     throw new Error(`Error ${response.status} al consultar GitHub Releases.`);
   }
@@ -118,11 +97,11 @@ export async function startApkUpdate(
       }
     }
   } else {
-    // Web / browser environment: trigger direct browser download
+    // Web / browser environment fallback
     const link = document.createElement('a');
     link.href = apkUrl;
     link.target = '_blank';
-    link.download = 'ChronoTask.apk';
+    link.download = 'KronoTask.apk';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
