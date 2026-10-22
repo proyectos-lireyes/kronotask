@@ -49,14 +49,25 @@ jobs:
 
       - name: Generar Keystore de firma automática si no existe
         run: |
+          mkdir -p android/app
           if [ ! -f android/app/release.keystore ]; then
-            keytool -genkey -v -keystore android/app/release.keystore -alias kronotask -keyalg RSA -keysize 2048 -validity 10000 -storepass chronotask -keypass chronotask -dname "CN=KronoTask, OU=Mobile, O=KronoTask, L=City, S=State, C=US"
+            echo "Generando nuevo keystore con alias kronotask..."
+            keytool -genkeypair -v -keystore android/app/release.keystore -alias kronotask -keyalg RSA -keysize 2048 -validity 10000 -storepass kronotask -keypass kronotask -dname "CN=KronoTask, OU=Mobile, O=KronoTask, L=City, S=State, C=US"
+          else
+            echo "Verificando alias kronotask en keystore existente..."
+            if ! keytool -list -keystore android/app/release.keystore -storepass kronotask -alias kronotask >/dev/null 2>&1; then
+              echo "El keystore existente no tiene el alias kronotask. Regenerando para sincronizar..."
+              rm -f android/app/release.keystore
+              keytool -genkeypair -v -keystore android/app/release.keystore -alias kronotask -keyalg RSA -keysize 2048 -validity 10000 -storepass kronotask -keypass kronotask -dname "CN=KronoTask, OU=Mobile, O=KronoTask, L=City, S=State, C=US"
+            else
+              echo "Keystore con alias kronotask verificado correctamente."
+            fi
           fi
 
       - name: Compilar APK Firmado
         run: |
           cd android
-          ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }} --stacktrace
+          ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }} -PreleaseKeyAlias=kronotask -PreleaseKeyPassword=kronotask -PreleaseStorePassword=kronotask --stacktrace
 
       - name: Renombrar y preparar APK
         run: |

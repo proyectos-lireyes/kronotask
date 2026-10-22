@@ -19,23 +19,16 @@ android {
 
     signingConfigs {
         release {
-            if (project.hasProperty('RELEASE_STORE_FILE') && file(project.property('RELEASE_STORE_FILE')).exists()) {
-                storeFile file(project.property('RELEASE_STORE_FILE'))
-                storePassword project.findProperty('RELEASE_STORE_PASSWORD') ?: 'chronotask'
-                keyAlias project.findProperty('RELEASE_KEY_ALIAS') ?: 'chronotask'
-                keyPassword project.findProperty('RELEASE_KEY_PASSWORD') ?: 'chronotask'
-            } else if (file('release.keystore').exists()) {
-                storeFile file('release.keystore')
-                storePassword 'chronotask'
-                keyAlias 'chronotask'
-                keyPassword 'chronotask'
-            }
+            storeFile file(project.findProperty('RELEASE_STORE_FILE') ?: 'release.keystore')
+            storePassword project.findProperty('releaseStorePassword') ?: project.findProperty('RELEASE_STORE_PASSWORD') ?: 'kronotask'
+            keyAlias project.findProperty('releaseKeyAlias') ?: project.findProperty('RELEASE_KEY_ALIAS') ?: 'kronotask'
+            keyPassword project.findProperty('releaseKeyPassword') ?: project.findProperty('RELEASE_KEY_PASSWORD') ?: 'kronotask'
         }
     }
 
     buildTypes {
         release {
-            if (signingConfigs.release.storeFile != null) {
+            if (signingConfigs.release.storeFile != null && signingConfigs.release.storeFile.exists()) {
                 signingConfig signingConfigs.release
             }
             minifyEnabled false
