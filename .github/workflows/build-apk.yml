@@ -31,7 +31,7 @@ jobs:
           node-version: 22
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       # Se inyecta el número de ejecución como versión de la app y el repo fijo
       - name: Compilar frontend web (Vite)
