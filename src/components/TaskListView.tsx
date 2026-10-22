@@ -29,7 +29,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
             <tr>
               <th className="py-3 px-4 w-10"></th>
               {isMasterView && <th className="py-3 px-4">Tablero</th>}
-              <th className="py-3 px-4">Tarea</th>
+              <th className="py-3 px-4 min-w-[240px]">Tarea</th>
               <th className="py-3 px-4">Semáforo de Tiempo</th>
               <th className="py-3 px-4">Estado</th>
               <th className="py-3 px-4">Prioridad</th>
@@ -42,7 +42,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
           <tbody className="divide-y divide-slate-100">
             {tasks.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-slate-400">
+                <td colSpan={isMasterView ? 10 : 9} className="py-12 text-center text-slate-400">
                   No se encontraron tareas con los filtros actuales.
                 </td>
               </tr>
@@ -86,9 +86,16 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                       </td>
                     )}
 
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-900 line-clamp-1">{task.title}</div>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                    <td className="py-3 px-4 min-w-[240px]">
+                      <div className="font-bold text-slate-900 text-xs sm:text-sm break-words whitespace-normal leading-snug">
+                        {task.title}
+                      </div>
+                      {task.description && (
+                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 break-words">
+                          {task.description}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
                         {task.attachments.length > 0 && (
                           <span className="flex items-center gap-0.5">
                             <Paperclip className="w-3 h-3" /> {task.attachments.length}

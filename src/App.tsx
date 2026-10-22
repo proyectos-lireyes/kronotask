@@ -58,6 +58,8 @@ import { BiometricLockScreen } from './components/BiometricLockScreen';
 import { NotificationsModal } from './components/NotificationsModal';
 import { SemaforoFilterModal } from './components/SemaforoFilterModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
+import { ConfirmationModal } from './components/ConfirmationModal';
+import { checkGitHubRelease } from './services/updateService';
 import {
   FolderKanban,
   LayoutGrid,
@@ -107,6 +109,19 @@ export default function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [isSemaforoModalOpen, setIsSemaforoModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    isDestructive?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -171,6 +186,31 @@ export default function App() {
     }, 10000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Comprobar actualización únicamente al iniciar la app
+  useEffect(() => {
+    let isMounted = true;
+    const checkForUpdatesOnStartup = async () => {
+      try {
+        const info = await checkGitHubRelease();
+        if (isMounted && info.hasUpdate) {
+          setIsUpdateModalOpen(true);
+        }
+      } catch (e) {
+        // Omisión silenciosa al iniciar si no hay red o aún no hay releases
+        console.warn('Verificación de actualización al inicio omitida:', e);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      checkForUpdatesOnStartup();
+    }, 1200);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   const updateTasks = (newTasks: TaskItem[]) => {
@@ -275,9 +315,18 @@ export default function App() {
   };
 
   const handleDeleteTask = (taskId: string) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarea?')) return;
-    const updated = tasks.filter((t) => t.id !== taskId);
-    updateTasks(updated);
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Tarea',
+      message: '¿Estás seguro de que deseas eliminar esta tarea permanentemente?',
+      confirmText: 'Eliminar',
+      isDestructive: true,
+      onConfirm: () => {
+        const updated = tasks.filter((t) => t.id !== taskId);
+        updateTasks(updated);
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   // Boards Management
@@ -296,13 +345,22 @@ export default function App() {
   };
 
   const handleDeleteBoard = (boardId: string) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este tablero y todas sus tareas asociadas?')) return;
-    const updated = boards.filter((b) => b.id !== boardId);
-    setBoards(updated);
-    saveBoards(updated);
-    if (currentBoardId === boardId && updated.length > 0) {
-      setCurrentBoardId(updated[0].id);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Tablero',
+      message: '¿Estás seguro de que deseas eliminar este tablero y todas sus tareas asociadas?',
+      confirmText: 'Eliminar Tablero',
+      isDestructive: true,
+      onConfirm: () => {
+        const updated = boards.filter((b) => b.id !== boardId);
+        setBoards(updated);
+        saveBoards(updated);
+        if (currentBoardId === boardId && updated.length > 0) {
+          setCurrentBoardId(updated[0].id);
+        }
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   // Types Management
@@ -880,6 +938,17 @@ export default function App() {
       <AppUpdateModal
         isOpen={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
+      />
+
+      {/* Global Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        isDestructive={confirmModal.isDestructive}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

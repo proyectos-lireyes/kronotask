@@ -112,7 +112,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       draggable
       onDragStart={(e) => onDragStart && onDragStart(e, task.id)}
       onClick={() => onSelect(task)}
-      className={`group relative rounded-xl border p-2 sm:p-2.5 transition-all duration-150 hover:shadow-xs cursor-pointer select-none active:scale-[0.99] ${getCardBorderClass()}`}
+      className={`group relative rounded-xl border p-2 sm:p-2.5 transition-all duration-200 hover:shadow-xs cursor-pointer select-none active:scale-[0.99] animate-in fade-in slide-in-from-bottom-3 duration-300 ${getCardBorderClass()}`}
       title="Toca para ver o editar la información completa"
     >
       {/* Top Row: Title + Quick Complete Button */}

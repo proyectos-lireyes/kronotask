@@ -73,7 +73,19 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/KronoTask-v1.0.${{ github.run_number }}.apk
 
-      # Publicación automática del Release en GitHub
+      # Extraer las novedades y cambios reales a partir de los commits
+      - name: Generar notas de novedades (Changelog)
+        id: changelog
+        run: |
+          COMMITS=$(git log -n 5 --no-merges --pretty=format:"• %s" | grep -v "Merge" || true)
+          if [ -z "$COMMITS" ]; then
+            COMMITS="• Mejoras en la estabilidad, interfaz móvil y corrección de errores."
+          fi
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Publicación automática del Release en GitHub con las notas reales
       - name: Publicar Release en GitHub
         if: success()
         uses: softprops/action-gh-release@v2
@@ -81,8 +93,7 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           name: "KronoTask v1.0.${{ github.run_number }}"
           body: |
-            ## 📱 KronoTask v1.0.${{ github.run_number }}
-            👉 [Descargar app-release.apk](https://github.com/proyectos-lireyes/kronotask/releases/latest/download/app-release.apk)
+            ${{ steps.changelog.outputs.CHANGELOG }}
           draft: false
           prerelease: false
           files: |

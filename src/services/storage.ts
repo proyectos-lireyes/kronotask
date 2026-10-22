@@ -7,47 +7,25 @@ import {
   TaskItem,
 } from '../types';
 
-const STORAGE_TASKS_KEY = 'chronotask_tasks_v3';
-const STORAGE_TAGS_KEY = 'chronotask_tags_v3';
-const STORAGE_BOARDS_KEY = 'chronotask_boards_v3';
-const STORAGE_TYPES_KEY = 'chronotask_types_v3';
-const STORAGE_PRIORITIES_KEY = 'chronotask_priorities_v3';
-const STORAGE_THEME_KEY = 'chronotask_theme_v3';
+const STORAGE_TASKS_KEY = 'kronotask_tasks_v5';
+const STORAGE_TAGS_KEY = 'kronotask_tags_v5';
+const STORAGE_BOARDS_KEY = 'kronotask_boards_v5';
+const STORAGE_TYPES_KEY = 'kronotask_types_v5';
+const STORAGE_PRIORITIES_KEY = 'kronotask_priorities_v5';
+const STORAGE_THEME_KEY = 'kronotask_theme_v5';
 
 export const DEFAULT_BOARDS: Board[] = [
   {
     id: 'board-work',
-    name: 'Trabajo',
-    description: 'Proyectos corporativos, entregas de clientes y reuniones',
+    name: 'Principal',
+    description: 'Tablero principal de tareas',
     color: '#2563eb',
     icon: 'Briefcase',
     createdAt: new Date().toISOString(),
   },
-  {
-    id: 'board-uni',
-    name: 'Universidad',
-    description: 'Materias, exámenes, tesis y tareas académicas',
-    color: '#7c3aed',
-    icon: 'GraduationCap',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'board-personal',
-    name: 'Personal',
-    description: 'Metas personales, finanzas, salud y hogar',
-    color: '#059669',
-    icon: 'User',
-    createdAt: new Date().toISOString(),
-  },
 ];
 
-export const DEFAULT_TAGS: CustomTag[] = [
-  { id: 'tag-1', name: 'Desarrollo', color: '#2563eb' },
-  { id: 'tag-2', name: 'Diseño UX', color: '#8b5cf6' },
-  { id: 'tag-3', name: 'Exámenes', color: '#ec4899' },
-  { id: 'tag-4', name: 'Investigación', color: '#10b981' },
-  { id: 'tag-5', name: 'Hogar', color: '#f59e0b' },
-];
+export const DEFAULT_TAGS: CustomTag[] = [];
 
 export const DEFAULT_TYPES: CustomTypeDefinition[] = [
   { id: 'evento', name: 'Evento', color: '#8b5cf6', iconName: 'Calendar' },
@@ -116,201 +94,7 @@ export const LIGHT_THEMES: LightThemeConfig[] = [
 ];
 
 export function getInitialTasks(): TaskItem[] {
-  const now = Date.now();
-  const hour = 1000 * 60 * 60;
-  const day = hour * 24;
-
-  return [
-    {
-      id: 'task-work-1',
-      boardId: 'board-work',
-      title: 'Planificación Estratégica Trimestral',
-      description: 'Definición de OKRs y asignación de equipo para el siguiente ciclo.',
-      status: 'todo',
-      startDate: new Date(now - hour * 3).toISOString(),
-      endDate: new Date(now + day * 6).toISOString(), // Green (< 25%)
-      priority: 'media',
-      type: 'hito',
-      tags: ['Desarrollo'],
-      recurrence: { enabled: true, interval: 1, unit: 'months' },
-      attachments: [],
-      comments: [],
-      reminders: [{ id: 'rem-1', offsetMinutes: 60, label: '1 hora antes' }],
-      createdAt: new Date(now - hour * 3).toISOString(),
-      updatedAt: new Date(now - hour * 3).toISOString(),
-    },
-    {
-      id: 'task-work-2',
-      boardId: 'board-work',
-      title: 'Implementación de API Backend v2',
-      description: 'Nuevos endpoints REST para la sincronización móvil en tiempo real.',
-      status: 'in_progress',
-      startDate: new Date(now - day * 2).toISOString(),
-      endDate: new Date(now + day * 3).toISOString(), // Blue (25-49%)
-      priority: 'alta',
-      type: 'caracteristica',
-      tags: ['Desarrollo'],
-      attachments: [],
-      comments: [
-        {
-          id: 'comm-1',
-          authorName: 'Carlos Dev',
-          authorEmail: 'carlos@empresa.com',
-          content: 'Endpoints de usuarios completados.',
-          createdAt: new Date(now - hour * 4).toISOString(),
-        },
-      ],
-      reminders: [{ id: 'rem-2', offsetMinutes: 30, label: '30 min antes' }],
-      createdAt: new Date(now - day * 2).toISOString(),
-      updatedAt: new Date(now - hour * 4).toISOString(),
-    },
-    {
-      id: 'task-work-waiting',
-      boardId: 'board-work',
-      title: 'Aprobación de Presupuesto con Gerencia',
-      description: 'En espera de visto bueno del director financiero. Tiene máximo 4 días antes de reactivarse.',
-      status: 'waiting',
-      waitingSince: new Date(now - day * 1.5).toISOString(), // Started waiting 1.5 days ago (2.5 days left)
-      startDate: new Date(now - day * 2).toISOString(),
-      endDate: new Date(now + day * 4).toISOString(),
-      priority: 'urgente',
-      type: 'tarea',
-      tags: ['Desarrollo'],
-      attachments: [],
-      comments: [
-        {
-          id: 'comm-w1',
-          authorName: 'Coordinador',
-          authorEmail: 'pm@empresa.com',
-          content: 'Documento enviado a gerencia. En espera de respuesta.',
-          createdAt: new Date(now - day * 1.5).toISOString(),
-        },
-      ],
-      reminders: [],
-      createdAt: new Date(now - day * 2).toISOString(),
-      updatedAt: new Date(now - day * 1.5).toISOString(),
-    },
-    {
-      id: 'task-work-3',
-      boardId: 'board-work',
-      title: 'Revisión de Seguridad y Cifrado',
-      description: 'Auditoría de políticas de acceso y tokens biométricos.',
-      status: 'in_review',
-      startDate: new Date(now - day * 3).toISOString(),
-      endDate: new Date(now + day * 1.5).toISOString(), // Yellow (50-74%)
-      priority: 'urgente',
-      type: 'mantenimiento',
-      tags: ['Desarrollo'],
-      attachments: [],
-      comments: [],
-      reminders: [],
-      createdAt: new Date(now - day * 3).toISOString(),
-      updatedAt: new Date(now - day * 3).toISOString(),
-    },
-    {
-      id: 'task-uni-1',
-      boardId: 'board-uni',
-      title: 'Capítulo 3 de Tesis: Metodología',
-      description: 'Redacción de metodología cuantitativa y diseño de pruebas estadísticas.',
-      status: 'in_progress',
-      startDate: new Date(now - day * 4).toISOString(),
-      endDate: new Date(now + hour * 14).toISOString(), // Orange (75-89%)
-      priority: 'alta',
-      type: 'investigacion',
-      tags: ['Investigación'],
-      attachments: [],
-      comments: [],
-      reminders: [{ id: 'rem-uni-1', offsetMinutes: 45, label: '45 min antes' }],
-      createdAt: new Date(now - day * 4).toISOString(),
-      updatedAt: new Date(now - day * 4).toISOString(),
-    },
-    {
-      id: 'task-uni-2',
-      boardId: 'board-uni',
-      title: 'Entrega de Tarea de Inteligencia Artificial',
-      description: 'Implementación del algoritmo A* y heurísticas de búsqueda.',
-      status: 'todo',
-      startDate: new Date(now - day * 2).toISOString(),
-      endDate: new Date(now + hour * 2).toISOString(), // Red (90-99%)
-      priority: 'critica',
-      type: 'tarea',
-      tags: ['Exámenes'],
-      attachments: [],
-      comments: [],
-      reminders: [{ id: 'rem-uni-2', offsetMinutes: 15, label: '15 min antes' }],
-      createdAt: new Date(now - day * 2).toISOString(),
-      updatedAt: new Date(now - day * 2).toISOString(),
-    },
-    {
-      id: 'event-work-1',
-      boardId: 'board-work',
-      title: 'Demo de Lanzamiento con Inversionistas',
-      description: 'Evento sincrónico clave con la junta directiva y clientes prioritarios.',
-      status: 'in_progress',
-      startDate: new Date(now + hour * 1).toISOString(),
-      endDate: new Date(now + hour * 3).toISOString(),
-      priority: 'critica',
-      type: 'evento',
-      tags: ['Desarrollo'],
-      attachments: [],
-      comments: [],
-      reminders: [{ id: 'rem-ev-1', offsetMinutes: 30, label: '30 min antes' }],
-      createdAt: new Date(now).toISOString(),
-      updatedAt: new Date(now).toISOString(),
-    },
-    {
-      id: 'event-uni-1',
-      boardId: 'board-uni',
-      title: 'Defensa de Tesis de Grado (Evento)',
-      description: 'Sustentación sincrónica con el tribunal académico. Choque potencial de eventos entre Trabajo y Universidad.',
-      status: 'in_progress',
-      startDate: new Date(now + hour * 2).toISOString(),
-      endDate: new Date(now + hour * 4).toISOString(),
-      priority: 'urgente',
-      type: 'evento',
-      tags: ['Exámenes'],
-      attachments: [],
-      comments: [],
-      reminders: [{ id: 'rem-ev-2', offsetMinutes: 15, label: '15 min antes' }],
-      createdAt: new Date(now).toISOString(),
-      updatedAt: new Date(now).toISOString(),
-    },
-    {
-      id: 'task-personal-1',
-      boardId: 'board-personal',
-      title: 'Mantenimiento Preventivo de Vehículo',
-      description: 'Superó la fecha límite recomendada de revisión.',
-      status: 'todo',
-      startDate: new Date(now - day * 4).toISOString(),
-      endDate: new Date(now - hour * 5).toISOString(), // Black (Overdue)
-      priority: 'alta',
-      type: 'mantenimiento',
-      tags: ['Hogar'],
-      attachments: [],
-      comments: [],
-      reminders: [],
-      createdAt: new Date(now - day * 4).toISOString(),
-      updatedAt: new Date(now - hour * 5).toISOString(),
-    },
-    {
-      id: 'task-historial-done',
-      boardId: 'board-work',
-      title: 'Setup de Servidores y Dominio SSL',
-      description: 'Completado y archivado en el Historial de cumplimiento.',
-      status: 'done',
-      completedAt: new Date(now - day * 2).toISOString(),
-      startDate: new Date(now - day * 8).toISOString(),
-      endDate: new Date(now - day * 1).toISOString(),
-      priority: 'media',
-      type: 'hito',
-      tags: ['Desarrollo'],
-      attachments: [],
-      comments: [],
-      reminders: [],
-      createdAt: new Date(now - day * 8).toISOString(),
-      updatedAt: new Date(now - day * 2).toISOString(),
-    },
-  ];
+  return [];
 }
 
 export function loadTasks(): TaskItem[] {
@@ -318,14 +102,12 @@ export function loadTasks(): TaskItem[] {
     const raw = localStorage.getItem(STORAGE_TASKS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error('Error loading tasks:', e);
   }
-  const initial = getInitialTasks();
-  saveTasks(initial);
-  return initial;
+  return [];
 }
 
 export function saveTasks(tasks: TaskItem[]) {
@@ -357,7 +139,7 @@ export function saveBoards(boards: Board[]) {
   }
 }
 
-const STORAGE_ACCEPTED_COLLISIONS_KEY = 'chronotask_accepted_collisions_v1';
+const STORAGE_ACCEPTED_COLLISIONS_KEY = 'kronotask_accepted_collisions_v5';
 
 export function loadCustomTypes(): CustomTypeDefinition[] {
   try {
@@ -437,7 +219,7 @@ export function loadTags(): CustomTag[] {
     const raw = localStorage.getItem(STORAGE_TAGS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error(e);
