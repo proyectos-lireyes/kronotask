@@ -61,62 +61,77 @@ export const initAuth = (
 };
 
 /**
- * Opens Google OAuth Account Picker popup to get OAuth access token directly from accounts.google.com
+ * Loads Google Identity Services (GIS) library dynamically and triggers Google Account Chooser
  */
-async function getGoogleOAuthTokenDirectly(): Promise<{ accessToken: string; profile: UserProfile }> {
+async function requestGoogleTokenViaGIS(): Promise<{ accessToken: string; profile: UserProfile }> {
   return new Promise((resolve, reject) => {
-    const clientId = firebaseConfig.oAuthClientId;
-    const redirectUri = window.location.origin;
-    const scope = 'openid profile email';
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=token&client_id=${encodeURIComponent(
-      clientId
-    )}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(
-      scope
-    )}&prompt=select_account`;
-
-    const popup = window.open(authUrl, 'google_oauth_popup', 'width=500,height=600');
-    if (!popup) {
-      return reject(new Error('El navegador bloqueó la ventana emergente de Google. Permita las ventanas emergentes e intente de nuevo.'));
-    }
-
-    const timer = setInterval(async () => {
+    const runGIS = () => {
       try {
-        if (popup.closed) {
-          clearInterval(timer);
-          reject(new Error('La ventana de selección de cuenta de Google se cerró antes de completar.'));
-          return;
+        const googleObj = (window as any).google;
+        if (!googleObj || !googleObj.accounts || !googleObj.accounts.oauth2) {
+          return reject(new Error('No se pudo inicializar la librería de inicio de sesión de Google.'));
         }
 
-        if (popup.location.href.includes('access_token=')) {
-          const hash = popup.location.hash.substring(1);
-          const params = new URLSearchParams(hash);
-          const accessToken = params.get('access_token');
-          popup.close();
-          clearInterval(timer);
+        const client = googleObj.accounts.oauth2.initTokenClient({
+          client_id: firebaseConfig.oAuthClientId,
+          scope: 'openid profile email',
+          prompt: 'select_account',
+          callback: async (response: any) => {
+            if (response.error) {
+              return reject(new Error(response.error_description || response.error));
+            }
+            if (!response.access_token) {
+              return reject(new Error('No se recibió la autorización de cuenta de Google.'));
+            }
 
-          if (!accessToken) {
-            return reject(new Error('No se recibió el token de acceso de Google.'));
-          }
+            try {
+              const accessToken = response.access_token;
+              // Fetch user profile info directly from Google's UserInfo API
+              const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              });
+              const googleUser = await res.json();
 
-          // Fetch real user profile from Google API
-          const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          const googleUser = await res.json();
+              const profile: UserProfile = {
+                uid: googleUser.sub || `google-${Date.now()}`,
+                displayName: googleUser.name || googleUser.given_name || 'Usuario Google',
+                email: googleUser.email || '',
+                photoURL: googleUser.picture || undefined,
+              };
 
-          const profile: UserProfile = {
-            uid: googleUser.sub || `google-${Date.now()}`,
-            displayName: googleUser.name || googleUser.given_name || 'Usuario Google',
-            email: googleUser.email || '',
-            photoURL: googleUser.picture || undefined,
-          };
+              resolve({ accessToken, profile });
+            } catch (fetchErr) {
+              reject(fetchErr);
+            }
+          },
+          error_callback: (err: any) => {
+            reject(new Error(err?.message || 'Selección de cuenta cancelada.'));
+          },
+        });
 
-          resolve({ accessToken, profile });
-        }
-      } catch {
-        // Cross-origin access restrictions while user is on accounts.google.com
+        client.requestAccessToken();
+      } catch (e: any) {
+        reject(e);
       }
-    }, 500);
+    };
+
+    if ((window as any).google?.accounts?.oauth2) {
+      runGIS();
+    } else {
+      const existingScript = document.getElementById('google-gis-script');
+      if (existingScript) {
+        existingScript.addEventListener('load', runGIS);
+      } else {
+        const script = document.createElement('script');
+        script.id = 'google-gis-script';
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => runGIS();
+        script.onerror = () => reject(new Error('No se pudo cargar Google Identity Services. Compruebe su conexión.'));
+        document.head.appendChild(script);
+      }
+    }
   });
 }
 
@@ -139,25 +154,24 @@ export const googleSignIn = async (): Promise<{ user: User | any; accessToken: s
         result = await signInWithPopup(auth, provider);
       }
     } catch (authErr: any) {
-      // Handle auth/unauthorized-domain or popup blocked by using direct Google OAuth Account Chooser
+      // Handle auth/unauthorized-domain or popup blocked using official Google Identity Services (GIS) Account Selector
       if (
         authErr.code === 'auth/unauthorized-domain' ||
         authErr.code === 'auth/popup-blocked' ||
         authErr.code === 'auth/operation-not-supported-in-this-environment' ||
         authErr.message?.includes('unauthorized-domain')
       ) {
-        console.info('Iniciando selector oficial de cuentas de Google mediante OAuth Directo...');
-        const { accessToken, profile } = await getGoogleOAuthTokenDirectly();
+        console.info('Iniciando selector oficial Google Identity Services (GIS)...');
+        const { accessToken, profile } = await requestGoogleTokenViaGIS();
         cachedAccessToken = accessToken;
 
         try {
-          // Sign in to Firebase Auth using Google Access Token credential
+          // Authenticate with Firebase Auth using Google OAuth Access Token
           const credential = GoogleAuthProvider.credential(null, accessToken);
           const userCred = await signInWithCredential(auth, credential);
           return { user: userCred.user, accessToken, profile };
         } catch (credErr) {
-          console.warn('Firebase credential signin notice:', credErr);
-          // Return valid Google user profile authenticated via Google OAuth
+          console.warn('Firebase credential signin note:', credErr);
           return {
             user: { uid: profile.uid, email: profile.email, displayName: profile.displayName, photoURL: profile.photoURL },
             accessToken,
