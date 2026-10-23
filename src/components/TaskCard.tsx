@@ -2,15 +2,13 @@ import React from 'react';
 import { TaskItem, CustomTag, Board } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
 import {
-  Clock,
-  Repeat,
-  Paperclip,
-  MessageSquare,
   CheckCircle2,
   Flag,
   Hourglass,
   ArrowRight,
   ArrowLeft,
+  Paperclip,
+  MessageSquare,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from '../services/notifications';
@@ -37,6 +35,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   const isDone = task.status === 'done';
   const isWaiting = task.status === 'waiting';
   const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
+  const isBlack = !isDone && timeCalc.level === 'black';
 
   // Calculate 4-day waiting remaining time if applicable
   let waitingRemainingText = '';
@@ -85,25 +84,35 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
-  // Border class with left-accent strip for Semáforo level
-  const getCardBorderClass = () => {
-    if (isDone) return 'border-l-4 border-l-slate-400 border-slate-200 bg-slate-50/70 opacity-75';
-    if (isWaiting) return 'border-l-4 border-l-purple-500 border-purple-200 bg-white hover:border-purple-300';
+  // El color de la tarjeta refleja directamente la cantidad de tiempo disponible para entrega
+  const getCardColorClass = () => {
+    if (isDone) {
+      return 'border-l-4 border-l-slate-400 border-slate-300 bg-slate-100/80 text-slate-600 opacity-70';
+    }
+    if (isWaiting) {
+      return 'border-l-4 border-l-purple-500 border-purple-300 bg-purple-50/90 hover:bg-purple-100/90 text-slate-800 shadow-2xs';
+    }
 
     switch (timeCalc.level) {
       case 'black':
-        return 'border-l-4 border-l-black border-stone-300 bg-stone-50/40 hover:border-black';
+        // Superó fecha límite / Vencida
+        return 'border-l-4 border-l-black border-stone-800 bg-stone-900 text-stone-100 hover:bg-stone-950 shadow-md ring-1 ring-stone-950/25';
       case 'red':
-        return 'border-l-4 border-l-rose-500 border-rose-200 bg-rose-50/20 hover:border-rose-400';
+        // Crítico (< 10% tiempo restante)
+        return 'border-l-4 border-l-rose-600 border-rose-300 bg-rose-50/95 hover:bg-rose-100/95 text-slate-900 shadow-2xs';
       case 'orange':
-        return 'border-l-4 border-l-amber-500 border-amber-200 bg-amber-50/20 hover:border-amber-400';
+        // Atención (10% - 24% tiempo restante)
+        return 'border-l-4 border-l-orange-500 border-orange-300 bg-orange-50/95 hover:bg-orange-100/95 text-slate-900 shadow-2xs';
       case 'yellow':
-        return 'border-l-4 border-l-yellow-400 border-yellow-200 bg-yellow-50/20 hover:border-yellow-400';
+        // Medio (25% - 49% tiempo restante)
+        return 'border-l-4 border-l-yellow-500 border-yellow-300 bg-yellow-50/95 hover:bg-yellow-100/95 text-slate-900 shadow-2xs';
       case 'blue':
-        return 'border-l-4 border-l-sky-500 border-sky-200 bg-sky-50/20 hover:border-sky-400';
+        // En curso (50% - 74% tiempo restante)
+        return 'border-l-4 border-l-sky-500 border-sky-300 bg-sky-50/90 hover:bg-sky-100/90 text-slate-900 shadow-2xs';
       case 'green':
       default:
-        return 'border-l-4 border-l-emerald-500 border-emerald-200 bg-emerald-50/10 hover:border-emerald-400';
+        // Holgado (> 75% tiempo restante)
+        return 'border-l-4 border-l-emerald-600 border-emerald-300 bg-emerald-50/90 hover:bg-emerald-100/90 text-slate-900 shadow-2xs';
     }
   };
 
@@ -112,15 +121,19 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       draggable
       onDragStart={(e) => onDragStart && onDragStart(e, task.id)}
       onClick={() => onSelect(task)}
-      className={`group relative rounded-xl border p-2 sm:p-2.5 transition-all duration-200 hover:shadow-xs cursor-pointer select-none active:scale-[0.99] animate-in fade-in slide-in-from-bottom-3 duration-300 ${getCardBorderClass()}`}
+      className={`group relative rounded-xl border p-2.5 transition-all duration-200 hover:shadow-xs cursor-pointer select-none active:scale-[0.99] animate-in fade-in slide-in-from-bottom-3 duration-300 ${getCardColorClass()}`}
       title="Toca para ver o editar la información completa"
     >
       {/* Top Row: Title + Quick Complete Button */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <h3
-            className={`text-xs sm:text-[13px] font-bold text-slate-800 leading-snug group-hover:text-blue-600 transition-colors truncate ${
-              isDone ? 'line-through text-slate-400 font-normal' : ''
+            className={`text-xs sm:text-[13px] font-bold leading-snug transition-colors truncate ${
+              isDone
+                ? 'line-through text-slate-400 font-normal'
+                : isBlack
+                ? 'text-stone-100 group-hover:text-amber-300'
+                : 'text-slate-900 group-hover:text-blue-700'
             }`}
           >
             {task.title}
@@ -134,7 +147,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           className={`shrink-0 p-1 rounded-lg transition-colors cursor-pointer ${
             isDone
               ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
-              : 'text-slate-300 hover:text-emerald-600 hover:bg-slate-100'
+              : isBlack
+              ? 'text-stone-400 hover:text-emerald-400 hover:bg-stone-800'
+              : 'text-slate-400 hover:text-emerald-600 hover:bg-white/80'
           }`}
           title={isDone ? 'Reabrir tarea' : 'Marcar como completada'}
         >
@@ -142,13 +157,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         </button>
       </div>
 
-      {/* Bottom Row: Ultra-Compact Essential Badges (Semáforo, Prioridad, Espera, Meta) */}
-      <div className="flex items-center justify-between gap-1.5 mt-1.5 pt-1 border-t border-slate-100/80 text-[10px]">
+      {/* Bottom Row: Badges (Semáforo, Prioridad, Espera, Meta) */}
+      <div
+        className={`flex items-center justify-between gap-1.5 mt-2 pt-1.5 border-t text-[10px] ${
+          isBlack ? 'border-stone-800 text-stone-400' : 'border-slate-200/70 text-slate-500'
+        }`}
+      >
         {/* Left tags / countdown */}
         <div className="flex items-center gap-1 overflow-hidden flex-wrap">
           {/* Semáforo Remaining Badge */}
           <span
-            className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md font-bold truncate max-w-[100px] ${timeCalc.badgeBg}`}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-bold truncate max-w-[110px] ${timeCalc.badgeBg}`}
             title={`Nivel ${timeCalc.label}: ${timeCalc.remainingText}`}
           >
             <span
@@ -166,7 +185,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {/* En Espera Badge */}
           {isWaiting && (
             <span
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold shrink-0"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-900 font-bold shrink-0"
               title={`En espera máx 4 días: ${waitingRemainingText}`}
             >
               <Hourglass className="w-2.5 h-2.5 animate-spin" />
@@ -177,7 +196,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {/* Board Badge (if Master View) */}
           {board && isMasterView && (
             <span
-              className="px-1.5 py-0.2 rounded-md text-white font-bold truncate max-w-[70px] shadow-2xs"
+              className="px-1.5 py-0.5 rounded-md text-white font-bold truncate max-w-[70px] shadow-2xs"
               style={{ backgroundColor: board.color }}
               title={`Tablero: ${board.name}`}
             >
@@ -186,42 +205,56 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           )}
 
           {/* Priority */}
-          <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold capitalize shrink-0">
+          <span
+            className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded font-semibold capitalize shrink-0 ${
+              isBlack ? 'bg-stone-800 text-stone-300' : 'bg-white/80 text-slate-700 border border-slate-200/60'
+            }`}
+          >
             <Flag className="w-2.5 h-2.5 text-slate-400" />
             <span className="truncate max-w-[55px]">{task.priority}</span>
           </span>
 
           {/* Primary Tag (if any) */}
           {task.tags && task.tags.length > 0 && (
-            <span className="hidden sm:inline-block px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 font-medium truncate max-w-[65px]">
+            <span
+              className={`hidden sm:inline-block px-1.5 py-0.5 rounded font-medium truncate max-w-[65px] ${
+                isBlack ? 'bg-stone-800 text-sky-300' : 'bg-blue-100/70 text-blue-800'
+              }`}
+            >
               #{task.tags[0]}
             </span>
           )}
         </div>
 
         {/* Right meta icons & fast step transition buttons */}
-        <div className="flex items-center gap-1 shrink-0 text-slate-400">
+        <div
+          className={`flex items-center gap-1 shrink-0 ${
+            isBlack ? 'text-stone-400' : 'text-slate-400'
+          }`}
+        >
           {task.attachments.length > 0 && (
             <span className="flex items-center gap-0.5" title="Archivos adjuntos">
-              <Paperclip className="w-3 h-3 text-slate-400" />
+              <Paperclip className="w-3 h-3" />
               <span className="text-[9px] font-bold">{task.attachments.length}</span>
             </span>
           )}
 
           {task.comments.length > 0 && (
             <span className="flex items-center gap-0.5" title="Comentarios">
-              <MessageSquare className="w-3 h-3 text-slate-400" />
+              <MessageSquare className="w-3 h-3" />
               <span className="text-[9px] font-bold">{task.comments.length}</span>
             </span>
           )}
 
-          {/* Micro arrow moves (on hover / mobile) */}
+          {/* Micro arrow moves */}
           <div className="flex items-center">
             {task.status !== 'todo' && (
               <button
                 type="button"
                 onClick={handleMoveLeft}
-                className="p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 cursor-pointer"
+                className={`p-0.5 rounded cursor-pointer ${
+                  isBlack ? 'hover:bg-stone-800 text-stone-400 hover:text-stone-200' : 'hover:bg-black/5 text-slate-400 hover:text-slate-700'
+                }`}
                 title="Mover a etapa anterior"
               >
                 <ArrowLeft className="w-3 h-3" />
@@ -231,7 +264,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               <button
                 type="button"
                 onClick={handleMoveRight}
-                className="p-0.5 hover:bg-slate-200/80 rounded text-slate-400 hover:text-slate-700 cursor-pointer"
+                className={`p-0.5 rounded cursor-pointer ${
+                  isBlack ? 'hover:bg-stone-800 text-stone-400 hover:text-stone-200' : 'hover:bg-black/5 text-slate-400 hover:text-slate-700'
+                }`}
                 title="Avanzar etapa"
               >
                 <ArrowRight className="w-3 h-3" />

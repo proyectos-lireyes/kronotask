@@ -21,6 +21,10 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
   onSelectTask,
   onStatusChange,
 }) => {
+  const sortedTasks = [...tasks].sort(
+    (a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime()
+  );
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
       <div className="overflow-x-auto">
@@ -40,14 +44,14 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {tasks.length === 0 ? (
+            {sortedTasks.length === 0 ? (
               <tr>
                 <td colSpan={isMasterView ? 10 : 9} className="py-12 text-center text-slate-400">
                   No se encontraron tareas con los filtros actuales.
                 </td>
               </tr>
             ) : (
-              tasks.map((task) => {
+              sortedTasks.map((task) => {
                 const isDone = task.status === 'done';
                 const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
                 const taskBoard = allBoards?.find((b) => b.id === task.boardId);

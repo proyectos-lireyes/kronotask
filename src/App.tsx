@@ -50,6 +50,7 @@ import { CalendarView } from './components/CalendarView';
 import { HistoryView } from './components/HistoryView';
 import { TaskListView } from './components/TaskListView';
 import { GlobalDashboardView } from './components/GlobalDashboardView';
+import { EisenhowerMatrixView } from './components/EisenhowerMatrixView';
 import { BoardSelectModal } from './components/BoardSelectModal';
 import { TaskModal } from './components/TaskModal';
 import { ReportsModal } from './components/ReportsModal';
@@ -59,7 +60,8 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SemaforoFilterModal } from './components/SemaforoFilterModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { checkGitHubRelease } from './services/updateService';
+import { checkGitHubRelease, checkAndCleanupOldApkOnStartup } from './services/updateService';
+import { ImportBoardAction } from './types';
 import {
   FolderKanban,
   LayoutGrid,
@@ -75,6 +77,7 @@ import {
   Clock,
   Settings,
   X,
+  Grid2x2,
 } from 'lucide-react';
 
 export default function App() {
@@ -95,8 +98,8 @@ export default function App() {
   const [isLocked, setIsLocked] = useState<boolean>(() => isVaultLocked());
 
   // Views order requested by user:
-  // tablero (modal trigger), kanban, tabla, calendario, gantt, historial (plus global dashboard)
-  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'calendar' | 'gantt' | 'history' | 'global'>('kanban');
+  // tablero (modal trigger), kanban, tabla, calendario, gantt, eisenhower, historial (plus global dashboard)
+  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'calendar' | 'gantt' | 'eisenhower' | 'history' | 'global'>('kanban');
 
   // Modals
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
@@ -188,11 +191,14 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Comprobar actualización únicamente al iniciar la app
+  // Comprobar actualización únicamente al iniciar la app y limpiar APKs de versiones previas
   useEffect(() => {
     let isMounted = true;
-    const checkForUpdatesOnStartup = async () => {
+    const initAppUpdates = async () => {
       try {
+        // Limpia el APK descargado previamente si la versión actual ya está al día
+        await checkAndCleanupOldApkOnStartup();
+
         const info = await checkGitHubRelease();
         if (isMounted && info.hasUpdate) {
           setIsUpdateModalOpen(true);
@@ -204,7 +210,7 @@ export default function App() {
     };
 
     const timer = setTimeout(() => {
-      checkForUpdatesOnStartup();
+      initAppUpdates();
     }, 1200);
 
     return () => {
@@ -225,7 +231,14 @@ export default function App() {
       if (res) setCurrentUser(res.profile);
     } catch (e: any) {
       console.error(e);
-      alert(`Error al acceder: ${e.message || 'Intente de nuevo'}`);
+      setConfirmModal({
+        isOpen: true,
+        title: 'Inicio de Sesión',
+        message: e.message || 'No se pudo completar el inicio de sesión con Google. Intente nuevamente.',
+        confirmText: 'Entendido',
+        isDestructive: false,
+        onConfirm: () => setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
     } finally {
       setIsLoggingIn(false);
     }
@@ -363,6 +376,105 @@ export default function App() {
     });
   };
 
+  // Base64 Import Board Action (supports overwrite, merge with suffix, or create new board)
+  const handleImportBoardAction = (action: ImportBoardAction) => {
+    if (action.mode === 'overwrite') {
+      const targetBoard =
+        boards.find(
+          (b) => b.id === action.targetBoardId || b.name.toLowerCase() === action.board.name.toLowerCase()
+        ) || boards[0];
+      const targetId = targetBoard.id;
+
+      // Filter out previous tasks of this board
+      const remainingTasks = tasks.filter(
+        (t) => t.boardId !== targetId && (t.boardId || targetId !== 'board-work')
+      );
+
+      // Reassign imported tasks to target board with fresh unique IDs
+      const imported = action.tasks.map((t, idx) => ({
+        ...t,
+        id: `task-imp-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        boardId: targetId,
+        updatedAt: new Date().toISOString(),
+      }));
+
+      const finalTasks = [...remainingTasks, ...imported];
+      updateTasks(finalTasks);
+      setCurrentBoardId(targetId);
+
+      setConfirmModal({
+        isOpen: true,
+        title: 'Importación Exitosa',
+        message: `El tablero "${targetBoard.name}" fue sobrescrito con éxito. Se cargaron ${imported.length} tareas.`,
+        confirmText: 'Aceptar',
+        isDestructive: false,
+        onConfirm: () => setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    } else if (action.mode === 'merge') {
+      const targetBoard =
+        boards.find(
+          (b) => b.id === action.targetBoardId || b.name.toLowerCase() === action.board.name.toLowerCase()
+        ) || boards[0];
+      const targetId = targetBoard.id;
+      const suffix = action.suffix || ' (Importado)';
+
+      const mergedTasks = action.tasks.map((t, idx) => ({
+        ...t,
+        id: `task-merge-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        boardId: targetId,
+        title: `${t.title}${suffix}`,
+        updatedAt: new Date().toISOString(),
+      }));
+
+      const finalTasks = [...tasks, ...mergedTasks];
+      updateTasks(finalTasks);
+      setCurrentBoardId(targetId);
+
+      setConfirmModal({
+        isOpen: true,
+        title: 'Importación Exitosa',
+        message: `Se combinaron ${mergedTasks.length} tareas con el sufijo "${suffix}" dentro del tablero "${targetBoard.name}".`,
+        confirmText: 'Aceptar',
+        isDestructive: false,
+        onConfirm: () => setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    } else {
+      // mode === 'new_board'
+      const newBoardId = `board-${Date.now()}`;
+      const newBoard: Board = {
+        id: newBoardId,
+        name: action.newBoardName?.trim() || `${action.board.name} (Importado)`,
+        description: action.board.description || 'Tablero importado vía Base64',
+        color: action.board.color || '#4f46e5',
+        createdAt: new Date().toISOString(),
+      };
+
+      const importedTasks = action.tasks.map((t, idx) => ({
+        ...t,
+        id: `task-newb-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        boardId: newBoardId,
+        updatedAt: new Date().toISOString(),
+      }));
+
+      const updatedBoards = [...boards, newBoard];
+      setBoards(updatedBoards);
+      saveBoards(updatedBoards);
+
+      const finalTasks = [...tasks, ...importedTasks];
+      updateTasks(finalTasks);
+      setCurrentBoardId(newBoardId);
+
+      setConfirmModal({
+        isOpen: true,
+        title: 'Nuevo Tablero Creado',
+        message: `Se creó el nuevo tablero "${newBoard.name}" con ${importedTasks.length} tareas importadas.`,
+        confirmText: 'Ir al Tablero',
+        isDestructive: false,
+        onConfirm: () => setConfirmModal((prev) => ({ ...prev, isOpen: false })),
+      });
+    }
+  };
+
   // Types Management
   const handleAddType = (name: string, color: string) => {
     const newType: CustomTypeDefinition = {
@@ -489,8 +601,10 @@ export default function App() {
     ? tasks
     : tasks.filter((t) => t.boardId === currentBoard.id || (!t.boardId && currentBoard.id === 'board-work'));
 
-  // Separate active vs completed
-  const activeTasks = boardTasks.filter((t) => t.status !== 'done');
+  // Separate active vs completed (sorted strictly by closest deadline / fecha fin más cercana)
+  const activeTasks = boardTasks
+    .filter((t) => t.status !== 'done')
+    .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
   const completedTasks = boardTasks.filter((t) => t.status === 'done');
 
   // Filtered Active Tasks by Semáforo & Search
@@ -536,7 +650,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 flex flex-col gap-3">
         {/* Navigation & Controls Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          {/* Desktop Views Switcher: Kanban, Tabla, Calendario, Gantt, Historial */}
+          {/* Desktop Views Switcher: Kanban, Tabla, Calendario, Gantt, Eisenhower, Historial */}
           <div className="hidden md:flex items-center gap-1 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
             <button
               type="button"
@@ -580,6 +694,17 @@ export default function App() {
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Gantt</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('eisenhower')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'eisenhower' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Grid2x2 className="w-3.5 h-3.5" />
+              <span>Eisenhower</span>
             </button>
 
             <button
@@ -737,6 +862,69 @@ export default function App() {
           />
         )}
 
+        {viewMode === 'eisenhower' && (
+          <EisenhowerMatrixView
+            tasks={boardTasks}
+            allTags={tags}
+            allBoards={boards}
+            isMasterView={isMasterBoard}
+            searchQuery={searchQuery}
+            filterPriority={filterPriority}
+            filterType={filterType}
+            filterTag={filterTag}
+            onSelectTask={(task) => {
+              setSelectedTask(task);
+              setIsTaskModalOpen(true);
+            }}
+            onStatusChange={handleTaskStatusChange}
+            onAddTaskToQuadrant={(quadrant) => {
+              const targetBoard = currentBoardId === 'master' ? (boards[0]?.id || 'board-work') : currentBoardId;
+              setSelectedTask(null);
+              setInitialStatusForNewTask('todo');
+              setInitialBoardForNewTask(targetBoard);
+              setIsTaskModalOpen(true);
+            }}
+            onReclassifyTask={(taskId, targetQuadrant) => {
+              const now = new Date();
+              const updated = tasks.map((t) => {
+                if (t.id !== taskId) return t;
+                let newPriority = t.priority;
+                let newEnd = new Date(t.endDate);
+
+                if (targetQuadrant === 1) {
+                  newPriority = 'urgent';
+                  if (newEnd.getTime() - now.getTime() > 48 * 3600 * 1000) {
+                    newEnd = new Date(now.getTime() + 24 * 3600 * 1000);
+                  }
+                } else if (targetQuadrant === 2) {
+                  newPriority = 'high';
+                  if (newEnd.getTime() - now.getTime() <= 48 * 3600 * 1000) {
+                    newEnd = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
+                  }
+                } else if (targetQuadrant === 3) {
+                  newPriority = 'low';
+                  if (newEnd.getTime() - now.getTime() > 48 * 3600 * 1000) {
+                    newEnd = new Date(now.getTime() + 24 * 3600 * 1000);
+                  }
+                } else if (targetQuadrant === 4) {
+                  newPriority = 'low';
+                  if (newEnd.getTime() - now.getTime() <= 48 * 3600 * 1000) {
+                    newEnd = new Date(now.getTime() + 14 * 24 * 3600 * 1000);
+                  }
+                }
+
+                return {
+                  ...t,
+                  priority: newPriority,
+                  endDate: newEnd.toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+              });
+              updateTasks(updated);
+            }}
+          />
+        )}
+
         {viewMode === 'history' && (
           <HistoryView
             completedTasks={completedTasks}
@@ -784,16 +972,16 @@ export default function App() {
       </button>
 
       {/* Mobile Pocket Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2 flex items-center justify-around shadow-lg">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
         {/* Kanban */}
         <button
           type="button"
           onClick={() => setViewMode('kanban')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-[11px] font-bold cursor-pointer transition-all ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
             viewMode === 'kanban' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <LayoutGrid className="w-4.5 h-4.5" />
+          <LayoutGrid className="w-4 h-4" />
           <span>Kanban</span>
         </button>
 
@@ -801,23 +989,35 @@ export default function App() {
         <button
           type="button"
           onClick={() => setViewMode('table')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-[11px] font-bold cursor-pointer transition-all ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
             viewMode === 'table' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <List className="w-4.5 h-4.5" />
+          <List className="w-4 h-4" />
           <span>Tabla</span>
+        </button>
+
+        {/* Matriz Eisenhower */}
+        <button
+          type="button"
+          onClick={() => setViewMode('eisenhower')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
+            viewMode === 'eisenhower' ? 'text-indigo-600 font-black bg-indigo-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Grid2x2 className="w-4 h-4" />
+          <span>Matriz</span>
         </button>
 
         {/* Calendario */}
         <button
           type="button"
           onClick={() => setViewMode('calendar')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-[11px] font-bold cursor-pointer transition-all ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
             viewMode === 'calendar' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <CalendarDays className="w-4.5 h-4.5" />
+          <CalendarDays className="w-4 h-4" />
           <span>Calendario</span>
         </button>
 
@@ -825,11 +1025,11 @@ export default function App() {
         <button
           type="button"
           onClick={() => setViewMode('gantt')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-[11px] font-bold cursor-pointer transition-all ${
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
             viewMode === 'gantt' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <BarChart3 className="w-4.5 h-4.5" />
+          <BarChart3 className="w-4 h-4" />
           <span>Gantt</span>
         </button>
       </nav>
@@ -904,6 +1104,8 @@ export default function App() {
           setBiometricRecord(getBiometricRecord());
           setIsLocked(isVaultLocked());
         }}
+        allTasks={tasks}
+        onImportBoard={handleImportBoardAction}
       />
 
       {/* Notifications Modal Center */}

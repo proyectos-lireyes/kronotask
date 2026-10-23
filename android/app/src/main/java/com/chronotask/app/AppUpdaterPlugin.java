@@ -108,6 +108,53 @@ public class AppUpdaterPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void checkDownloadedApk(PluginCall call) {
+        try {
+            Context context = getContext();
+            File downloadDir = context.getExternalFilesDir(null);
+            if (downloadDir == null) {
+                downloadDir = context.getCacheDir();
+            }
+            File apkFile = new File(downloadDir, "app-update.apk");
+            boolean exists = apkFile.exists() && apkFile.length() > 500 * 1024; // at least 500KB
+            JSObject res = new JSObject();
+            res.put("exists", exists);
+            if (exists) {
+                res.put("sizeBytes", apkFile.length());
+                res.put("path", apkFile.getAbsolutePath());
+            }
+            call.resolve(res);
+        } catch (Exception e) {
+            JSObject res = new JSObject();
+            res.put("exists", false);
+            call.resolve(res);
+        }
+    }
+
+    @PluginMethod
+    public void deleteDownloadedApk(PluginCall call) {
+        try {
+            Context context = getContext();
+            File downloadDir = context.getExternalFilesDir(null);
+            if (downloadDir == null) {
+                downloadDir = context.getCacheDir();
+            }
+            File apkFile = new File(downloadDir, "app-update.apk");
+            boolean deleted = false;
+            if (apkFile.exists()) {
+                deleted = apkFile.delete();
+            }
+            JSObject res = new JSObject();
+            res.put("success", deleted);
+            call.resolve(res);
+        } catch (Exception e) {
+            JSObject res = new JSObject();
+            res.put("success", false);
+            call.resolve(res);
+        }
+    }
+
+    @PluginMethod
     public void installApk(PluginCall call) {
         try {
             Context context = getContext();

@@ -4,13 +4,15 @@ export interface AppUpdaterPluginInterface {
   downloadApk(options: { url: string }): Promise<{ success: boolean; path?: string }>;
   installApk(): Promise<{ success: boolean }>;
   downloadAndInstall(options: { url: string }): Promise<{ success: boolean }>;
+  checkDownloadedApk(): Promise<{ exists: boolean; sizeBytes?: number; path?: string }>;
+  deleteDownloadedApk(): Promise<{ success: boolean }>;
   addListener(
     eventName: 'downloadProgress',
     listenerFunc: (data: { progress: number; bytesDownloaded: number; totalBytes: number }) => void
   ): Promise<{ remove: () => void }>;
   addListener(
     eventName: 'downloadComplete',
-    listenerFunc: (data: { success: boolean }) => void
+    listenerFunc: (data: { success: boolean; path?: string }) => void
   ): Promise<{ remove: () => void }>;
 }
 
@@ -18,6 +20,8 @@ export const AppUpdater = registerPlugin<AppUpdaterPluginInterface>('AppUpdater'
 
 export const APP_CURRENT_VERSION = (import.meta as any).env?.VITE_APP_VERSION || '1.0.0';
 export const FIXED_GITHUB_REPO = 'proyectos-lireyes/kronotask';
+
+const STORAGE_KEY_DOWNLOADED_VER = 'kronotask_downloaded_apk_version';
 
 export function compareVersions(v1: string, v2: string): number {
   const cleanV1 = v1.replace(/^v/i, '').split('.').map((p) => parseInt(p, 10) || 0);
@@ -109,8 +113,54 @@ export async function checkGitHubRelease(repo = FIXED_GITHUB_REPO): Promise<Rele
 
 let cachedDownloadedBlobUrl: string | null = null;
 
+/**
+ * Checks if the APK is already downloaded in local storage and ready to install.
+ */
+export async function isApkReadyToInstall(targetVersion?: string): Promise<boolean> {
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+    try {
+      const res = await AppUpdater.checkDownloadedApk();
+      return !!res?.exists;
+    } catch {
+      return false;
+    }
+  } else {
+    // Web: check if blob is cached in memory
+    return !!cachedDownloadedBlobUrl;
+  }
+}
+
+/**
+ * Deletes the downloaded APK file from local storage.
+ */
+export async function cleanupDownloadedApk(): Promise<void> {
+  try {
+    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+      await AppUpdater.deleteDownloadedApk();
+    }
+    cachedDownloadedBlobUrl = null;
+    localStorage.removeItem(STORAGE_KEY_DOWNLOADED_VER);
+  } catch (e) {
+    console.warn('Error limpiando APK descargado:', e);
+  }
+}
+
+/**
+ * Verifies on startup whether a previous update was successfully applied.
+ * If currentVersion >= downloadedVersion, cleans up the old APK automatically.
+ */
+export async function checkAndCleanupOldApkOnStartup(): Promise<void> {
+  const downloadedVer = localStorage.getItem(STORAGE_KEY_DOWNLOADED_VER);
+  if (downloadedVer) {
+    if (compareVersions(APP_CURRENT_VERSION, downloadedVer) >= 0) {
+      await cleanupDownloadedApk();
+    }
+  }
+}
+
 export async function downloadApkFile(
   apkUrl: string,
+  targetVersion?: string,
   onProgress?: (progress: number, bytesDownloaded: number, totalBytes: number) => void
 ): Promise<void> {
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
@@ -121,6 +171,9 @@ export async function downloadApkFile(
       });
 
       await AppUpdater.downloadApk({ url: apkUrl });
+      if (targetVersion) {
+        localStorage.setItem(STORAGE_KEY_DOWNLOADED_VER, targetVersion);
+      }
     } finally {
       if (progressSub && typeof progressSub.remove === 'function') {
         progressSub.remove();
@@ -155,6 +208,9 @@ export async function downloadApkFile(
         cachedDownloadedBlobUrl = URL.createObjectURL(blob);
         onProgress?.(100, total, total);
       }
+      if (targetVersion) {
+        localStorage.setItem(STORAGE_KEY_DOWNLOADED_VER, targetVersion);
+      }
     } catch {
       // Direct anchor download fallback if CORS prevents streaming
       for (let p = 15; p <= 100; p += 25) {
@@ -162,6 +218,9 @@ export async function downloadApkFile(
         await new Promise((r) => setTimeout(r, 200));
       }
       cachedDownloadedBlobUrl = apkUrl;
+      if (targetVersion) {
+        localStorage.setItem(STORAGE_KEY_DOWNLOADED_VER, targetVersion);
+      }
     }
   }
 }
@@ -185,8 +244,9 @@ export async function installDownloadedApk(fallbackUrl?: string): Promise<void> 
 
 export async function startApkUpdate(
   apkUrl: string,
+  targetVersion?: string,
   onProgress?: (progress: number, bytesDownloaded: number, totalBytes: number) => void
 ): Promise<void> {
-  await downloadApkFile(apkUrl, onProgress);
+  await downloadApkFile(apkUrl, targetVersion, onProgress);
   await installDownloadedApk(apkUrl);
 }

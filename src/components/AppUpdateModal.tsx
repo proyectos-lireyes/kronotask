@@ -8,12 +8,15 @@ import {
   Smartphone,
   ShieldCheck,
   ArrowUpCircle,
+  Trash2,
 } from 'lucide-react';
 import {
   APP_CURRENT_VERSION,
   checkGitHubRelease,
   downloadApkFile,
   installDownloadedApk,
+  isApkReadyToInstall,
+  cleanupDownloadedApk,
   ReleaseInfo,
 } from '../services/updateService';
 
@@ -36,7 +39,6 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
   useEffect(() => {
     if (isOpen) {
       setErrorMessage(null);
-      setIsDownloaded(false);
       setIsDownloading(false);
       setProgressPercent(0);
       handleCheckUpdates();
@@ -47,8 +49,12 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const info = await checkGitHubRelease();
+      const [info, ready] = await Promise.all([
+        checkGitHubRelease(),
+        isApkReadyToInstall(),
+      ]);
       setReleaseInfo(info);
+      setIsDownloaded(ready);
     } catch (err: any) {
       setErrorMessage(err.message || 'No se pudo verificar actualizaciones.');
     } finally {
@@ -64,11 +70,15 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
     setErrorMessage(null);
 
     try {
-      await downloadApkFile(releaseInfo.apkDownloadUrl, (progress, dlBytes, totBytes) => {
-        setProgressPercent(progress);
-        setDownloadedBytes(dlBytes);
-        setTotalBytes(totBytes);
-      });
+      await downloadApkFile(
+        releaseInfo.apkDownloadUrl,
+        releaseInfo.latestVersion,
+        (progress, dlBytes, totBytes) => {
+          setProgressPercent(progress);
+          setDownloadedBytes(dlBytes);
+          setTotalBytes(totBytes);
+        }
+      );
       setIsDownloaded(true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Error al descargar el archivo de actualización.');
@@ -88,6 +98,12 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
     } finally {
       setIsInstalling(false);
     }
+  };
+
+  const handleDiscardDownload = async () => {
+    await cleanupDownloadedApk();
+    setIsDownloaded(false);
+    setProgressPercent(0);
   };
 
   if (!isOpen) return null;
@@ -202,13 +218,23 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
                     </div>
                   )}
 
-                  {/* Success state after download */}
-                  {isDownloaded && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span className="font-semibold">
-                        Actualización descargada correctamente. Lista para instalar.
-                      </span>
+                  {/* Success state if downloaded (persisted in memory/storage) */}
+                  {isDownloaded && !isDownloading && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="font-semibold text-[11px] leading-tight">
+                          Actualización guardada en el dispositivo. Lista para instalar ahora o más tarde.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDiscardDownload}
+                        title="Eliminar APK descargado"
+                        className="p-1 hover:bg-emerald-100 rounded text-emerald-700 cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-rose-600" />
+                      </button>
                     </div>
                   )}
 
@@ -224,15 +250,26 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
                       <span>{isDownloading ? 'Descargando...' : `Descargar actualización v${releaseInfo.latestVersion}`}</span>
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleInstall}
-                      disabled={isInstalling}
-                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      <ArrowUpCircle className="w-4 h-4" />
-                      <span>{isInstalling ? 'Iniciando instalador...' : 'Instalar actualización'}</span>
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={handleInstall}
+                        disabled={isInstalling}
+                        className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <ArrowUpCircle className="w-4 h-4" />
+                        <span>{isInstalling ? 'Iniciando instalador...' : 'Instalar actualización ahora'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        disabled={isDownloading}
+                        className="w-full py-1.5 px-3 bg-transparent hover:bg-blue-50 text-blue-700 rounded-lg text-[11px] font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Descargar de nuevo</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -264,7 +301,10 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({ isOpen, onClose 
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+        <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+          <span className="text-[10px] text-slate-400">
+            {isDownloaded ? 'APK guardado localmente' : 'Descarga directa y segura'}
+          </span>
           <button
             type="button"
             onClick={onClose}

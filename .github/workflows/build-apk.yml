@@ -47,22 +47,14 @@ jobs:
       - name: Permisos de ejecución a Gradle
         run: chmod +x android/gradlew
 
-      - name: Generar Keystore de firma automática si no existe
+      - name: Asegurar Keystore de firma único y permanente
         run: |
           mkdir -p android/app
-          if [ ! -f android/app/release.keystore ]; then
-            echo "Generando nuevo keystore con alias kronotask..."
-            keytool -genkeypair -v -keystore android/app/release.keystore -alias kronotask -keyalg RSA -keysize 2048 -validity 10000 -storepass kronotask -keypass kronotask -dname "CN=KronoTask, OU=Mobile, O=KronoTask, L=City, S=State, C=US"
-          else
-            echo "Verificando alias kronotask en keystore existente..."
-            if ! keytool -list -keystore android/app/release.keystore -storepass kronotask -alias kronotask >/dev/null 2>&1; then
-              echo "El keystore existente no tiene el alias kronotask. Regenerando para sincronizar..."
-              rm -f android/app/release.keystore
-              keytool -genkeypair -v -keystore android/app/release.keystore -alias kronotask -keyalg RSA -keysize 2048 -validity 10000 -storepass kronotask -keypass kronotask -dname "CN=KronoTask, OU=Mobile, O=KronoTask, L=City, S=State, C=US"
-            else
-              echo "Keystore con alias kronotask verificado correctamente."
-            fi
+          if [ ! -f android/app/release.keystore ] || [ ! -s android/app/release.keystore ]; then
+            echo "Restaurando keystore permanente de firma fija..."
+            echo "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" | base64 -d > android/app/release.keystore
           fi
+          echo "Keystore permanente verificado con éxito (tamaño: $(wc -c < android/app/release.keystore) bytes)."
 
       - name: Compilar APK Firmado
         run: |

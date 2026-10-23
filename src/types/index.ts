@@ -123,3 +123,15 @@ export interface ComplianceMetrics {
   complianceRate: number;
   averageCompletionHours: number;
 }
+
+export type ImportResolutionMode = 'overwrite' | 'merge' | 'new_board';
+
+export interface ImportBoardAction {
+  mode: ImportResolutionMode;
+  targetBoardId?: string;
+  newBoardName?: string;
+  board: Board;
+  tasks: TaskItem[];
+  suffix?: string;
+}
+
