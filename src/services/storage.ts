@@ -28,8 +28,8 @@ export const DEFAULT_BOARDS: Board[] = [
 export const DEFAULT_TAGS: CustomTag[] = [];
 
 export const DEFAULT_TYPES: CustomTypeDefinition[] = [
-  { id: 'evento', name: 'Evento', color: '#8b5cf6', iconName: 'Calendar' },
   { id: 'tarea', name: 'Tarea', color: '#64748b' },
+  { id: 'evento', name: 'Evento', color: '#8b5cf6', iconName: 'Calendar' },
   { id: 'caracteristica', name: 'Función', color: '#2563eb' },
   { id: 'bug', name: 'Bug / Error', color: '#e11d48' },
   { id: 'hito', name: 'Hito', color: '#7c3aed' },
@@ -147,14 +147,27 @@ export function loadCustomTypes(): CustomTypeDefinition[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Ensure 'evento' type is always available
+        // Ensure 'tarea' is at index 0 and always available
+        const hasTarea = parsed.some(
+          (t: CustomTypeDefinition) => t.id === 'tarea' || t.name?.toLowerCase() === 'tarea'
+        );
+        if (!hasTarea) {
+          parsed.unshift({ id: 'tarea', name: 'Tarea', color: '#64748b' });
+        }
+        const tareaIdx = parsed.findIndex((t: CustomTypeDefinition) => t.id === 'tarea');
+        if (tareaIdx > 0) {
+          const [tItem] = parsed.splice(tareaIdx, 1);
+          parsed.unshift(tItem);
+        }
+
+        // Ensure 'evento' type is also available
         const hasEvento = parsed.some(
           (t: CustomTypeDefinition) => t.id === 'evento' || t.name?.toLowerCase() === 'evento'
         );
         if (!hasEvento) {
-          parsed.unshift({ id: 'evento', name: 'Evento', color: '#8b5cf6', iconName: 'Calendar' });
-          saveCustomTypes(parsed);
+          parsed.push({ id: 'evento', name: 'Evento', color: '#8b5cf6', iconName: 'Calendar' });
         }
+        saveCustomTypes(parsed);
         return parsed;
       }
     }

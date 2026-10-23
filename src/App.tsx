@@ -357,6 +357,16 @@ export default function App() {
     setCurrentBoardId(newBoard.id);
   };
 
+  const handleUpdateBoard = (boardId: string, name: string, description: string, color: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const updated = boards.map((b) =>
+      b.id === boardId ? { ...b, name: trimmed, description: description.trim(), color } : b
+    );
+    setBoards(updated);
+    saveBoards(updated);
+  };
+
   const handleDeleteBoard = (boardId: string) => {
     setConfirmModal({
       isOpen: true,
@@ -1042,6 +1052,7 @@ export default function App() {
         currentBoardId={currentBoardId}
         onSelectBoard={(id) => setCurrentBoardId(id)}
         onAddBoard={handleAddBoard}
+        onUpdateBoard={handleUpdateBoard}
         onDeleteBoard={handleDeleteBoard}
         allTasks={tasks}
       />
@@ -1083,6 +1094,7 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         boards={boards}
         onAddBoard={handleAddBoard}
+        onUpdateBoard={handleUpdateBoard}
         onDeleteBoard={handleDeleteBoard}
         types={types}
         onAddType={handleAddType}

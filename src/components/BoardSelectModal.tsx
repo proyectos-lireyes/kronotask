@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Board, TaskItem } from '../types';
-import { FolderKanban, Plus, Check, X, Trash2, Layers } from 'lucide-react';
+import { FolderKanban, Plus, Check, X, Trash2, Layers, Pencil } from 'lucide-react';
 
 interface BoardSelectModalProps {
   isOpen: boolean;
@@ -9,6 +9,7 @@ interface BoardSelectModalProps {
   currentBoardId: string;
   onSelectBoard: (boardId: string) => void;
   onAddBoard: (name: string, description: string, color: string) => void;
+  onUpdateBoard: (boardId: string, name: string, description: string, color: string) => void;
   onDeleteBoard: (boardId: string) => void;
   allTasks: TaskItem[];
 }
@@ -20,6 +21,7 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
   currentBoardId,
   onSelectBoard,
   onAddBoard,
+  onUpdateBoard,
   onDeleteBoard,
   allTasks,
 }) => {
@@ -27,6 +29,12 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
   const [newBoardName, setNewBoardName] = useState('');
   const [newBoardDesc, setNewBoardDesc] = useState('');
   const [newBoardColor, setNewBoardColor] = useState('#2563eb');
+
+  // Edit Board State
+  const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
+  const [editBoardName, setEditBoardName] = useState('');
+  const [editBoardDesc, setEditBoardDesc] = useState('');
+  const [editBoardColor, setEditBoardColor] = useState('#2563eb');
 
   if (!isOpen) return null;
 
@@ -37,6 +45,21 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
     setNewBoardName('');
     setNewBoardDesc('');
     setIsCreating(false);
+  };
+
+  const handleStartEdit = (e: React.MouseEvent, board: Board) => {
+    e.stopPropagation();
+    setEditingBoardId(board.id);
+    setEditBoardName(board.name);
+    setEditBoardDesc(board.description || '');
+    setEditBoardColor(board.color || '#2563eb');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent, boardId: string) => {
+    e.preventDefault();
+    if (!editBoardName.trim()) return;
+    onUpdateBoard(boardId, editBoardName.trim(), editBoardDesc.trim(), editBoardColor);
+    setEditingBoardId(null);
   };
 
   return (
@@ -50,7 +73,7 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">Seleccionar Tablero</h3>
-              <p className="text-xs text-slate-500">Cambia de espacio de trabajo o crea uno nuevo</p>
+              <p className="text-xs text-slate-500">Cambia, renombra o crea un nuevo espacio de trabajo</p>
             </div>
           </div>
           <button
@@ -67,7 +90,6 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
           {(() => {
             const isMasterSelected = currentBoardId === 'master';
             const totalActiveTasks = allTasks.filter((t) => t.status !== 'done').length;
-            const totalDoneTasks = allTasks.filter((t) => t.status === 'done').length;
 
             return (
               <div
@@ -129,12 +151,95 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
 
           {boards.map((b) => {
             const isSelected = b.id === currentBoardId;
+            const isEditing = editingBoardId === b.id;
             const taskCount = allTasks.filter(
               (t) => (t.boardId === b.id || (!t.boardId && b.id === 'board-work')) && t.status !== 'done'
             ).length;
-            const doneCount = allTasks.filter(
-              (t) => (t.boardId === b.id || (!t.boardId && b.id === 'board-work')) && t.status === 'done'
-            ).length;
+
+            if (isEditing) {
+              return (
+                <form
+                  key={b.id}
+                  onSubmit={(e) => handleSaveEdit(e, b.id)}
+                  className="p-3.5 bg-blue-50/50 rounded-2xl border-2 border-blue-400 shadow-sm space-y-2.5 animate-in fade-in duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                      Editar / Renombrar Tablero
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingBoardId(null)}
+                      className="text-slate-400 hover:text-slate-700 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    required
+                    value={editBoardName}
+                    onChange={(e) => setEditBoardName(e.target.value)}
+                    placeholder="Nombre del tablero..."
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+
+                  <input
+                    type="text"
+                    value={editBoardDesc}
+                    onChange={(e) => setEditBoardDesc(e.target.value)}
+                    placeholder="Descripción opcional..."
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-600 font-semibold">Color:</span>
+                      <input
+                        type="color"
+                        value={editBoardColor}
+                        onChange={(e) => setEditBoardColor(e.target.value)}
+                        className="w-7 h-7 rounded-lg border border-slate-300 cursor-pointer p-0.5"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {boards.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingBoardId(null);
+                            onDeleteBoard(b.id);
+                          }}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 rounded-lg cursor-pointer transition-colors"
+                          title="Eliminar tablero"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setEditingBoardId(null)}
+                        className="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-200 rounded-xl font-semibold cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Guardar
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              );
+            }
 
             return (
               <div
@@ -143,18 +248,18 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
                   onSelectBoard(b.id);
                   onClose();
                 }}
-                className={`p-3.5 rounded-2xl border-2 transition-all flex items-center justify-between cursor-pointer active:scale-[0.99] ${
+                className={`p-3.5 rounded-2xl border-2 transition-all flex items-center justify-between cursor-pointer active:scale-[0.99] group ${
                   isSelected
                     ? 'border-blue-600 bg-blue-50/40 shadow-xs ring-1 ring-blue-400/40'
                     : 'border-slate-200 hover:border-slate-300 bg-white'
                 }`}
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <span
                     className="w-4 h-4 rounded-full shrink-0 shadow-xs"
                     style={{ backgroundColor: b.color }}
                   />
-                  <div className="truncate">
+                  <div className="truncate flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-900 truncate">{b.name}</span>
                       {isSelected && (
@@ -169,7 +274,17 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  {/* Rename / Edit Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleStartEdit(e, b)}
+                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors"
+                    title="Cambiar nombre / Editar tablero"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+
                   <div className="text-right">
                     <span className="text-xs font-black text-slate-800">{taskCount}</span>
                     <span className="text-[10px] text-slate-400 block">activas</span>

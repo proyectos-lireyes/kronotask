@@ -48,6 +48,7 @@ import {
   Upload,
   ArrowDownUp,
   FileText,
+  Pencil,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -55,6 +56,7 @@ interface SettingsModalProps {
   onClose: () => void;
   boards: Board[];
   onAddBoard: (name: string, description: string, color: string) => void;
+  onUpdateBoard?: (boardId: string, name: string, description: string, color: string) => void;
   onDeleteBoard: (boardId: string) => void;
   types: CustomTypeDefinition[];
   onAddType: (name: string, color: string) => void;
@@ -79,6 +81,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   boards,
   onAddBoard,
+  onUpdateBoard,
   onDeleteBoard,
   types,
   onAddType,
@@ -105,6 +108,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newBoardName, setNewBoardName] = useState('');
   const [newBoardDesc, setNewBoardDesc] = useState('');
   const [newBoardColor, setNewBoardColor] = useState('#2563eb');
+
+  // Board Edit State
+  const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
+  const [editBoardName, setEditBoardName] = useState('');
+  const [editBoardDesc, setEditBoardDesc] = useState('');
+  const [editBoardColor, setEditBoardColor] = useState('#2563eb');
 
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeColor, setNewTypeColor] = useState('#64748b');
@@ -773,35 +782,131 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </form>
 
               <div className="space-y-2">
-                {boards.map((b) => (
-                  <div
-                    key={b.id}
-                    className="flex items-center justify-between p-3 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-2xs"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className="w-3.5 h-3.5 rounded-full shadow-2xs"
-                        style={{ backgroundColor: b.color }}
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 block">{b.name}</span>
-                        {b.description && (
-                          <span className="text-[10px] text-slate-400">{b.description}</span>
+                {boards.map((b) => {
+                  const isEditing = editingBoardId === b.id;
+
+                  if (isEditing) {
+                    return (
+                      <form
+                        key={b.id}
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!editBoardName.trim()) return;
+                          onUpdateBoard?.(b.id, editBoardName.trim(), editBoardDesc.trim(), editBoardColor);
+                          setEditingBoardId(null);
+                        }}
+                        className="p-3 bg-blue-50/60 rounded-2xl border-2 border-blue-400 space-y-2 animate-in fade-in duration-150"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-blue-900 uppercase flex items-center gap-1.5">
+                            <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                            Editar Nombre y Datos del Tablero
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingBoardId(null)}
+                            className="text-slate-400 hover:text-slate-700 p-0.5"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <input
+                          type="text"
+                          required
+                          value={editBoardName}
+                          onChange={(e) => setEditBoardName(e.target.value)}
+                          placeholder="Nombre del tablero..."
+                          className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                        />
+
+                        <input
+                          type="text"
+                          value={editBoardDesc}
+                          onChange={(e) => setEditBoardDesc(e.target.value)}
+                          placeholder="Descripción opcional..."
+                          className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                        />
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-slate-600 font-semibold">Color:</span>
+                            <input
+                              type="color"
+                              value={editBoardColor}
+                              onChange={(e) => setEditBoardColor(e.target.value)}
+                              className="w-8 h-8 rounded-lg border border-slate-300 cursor-pointer p-0.5"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingBoardId(null)}
+                              className="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-200 rounded-xl font-semibold cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="submit"
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs cursor-pointer flex items-center gap-1"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              Guardar
+                            </button>
+                          </div>
+                        </div>
+                      </form>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={b.id}
+                      className="flex items-center justify-between p-3 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full shadow-2xs shrink-0"
+                          style={{ backgroundColor: b.color }}
+                        />
+                        <div className="truncate flex-1">
+                          <span className="text-xs font-bold text-slate-900 block truncate">{b.name}</span>
+                          {b.description && (
+                            <span className="text-[10px] text-slate-400 block truncate">{b.description}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingBoardId(b.id);
+                            setEditBoardName(b.name);
+                            setEditBoardDesc(b.description || '');
+                            setEditBoardColor(b.color);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                          title="Cambiar nombre / Editar tablero"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        {boards.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteBoard(b.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
+                            title="Eliminar tablero"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         )}
                       </div>
                     </div>
-                    {boards.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteBoard(b.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
-                        title="Eliminar tablero"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

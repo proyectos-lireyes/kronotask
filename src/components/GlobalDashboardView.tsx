@@ -48,6 +48,7 @@ export const GlobalDashboardView: React.FC<GlobalDashboardViewProps> = ({
   onToggleAcceptCollision,
 }) => {
   const [filterMode, setFilterMode] = useState<'pending' | 'accepted' | 'all' | 'inter_only'>('pending');
+  const [deliveryTab, setDeliveryTab] = useState<'this_week' | 'next_week' | 'this_month' | 'overdue'>('this_week');
   const [boardFilter, setBoardFilter] = useState<string>('all');
   const [isBoardPickerOpen, setIsBoardPickerOpen] = useState(false);
   const [resolvedMessage, setResolvedMessage] = useState<string | null>(null);
@@ -89,11 +90,25 @@ export const GlobalDashboardView: React.FC<GlobalDashboardViewProps> = ({
     return true;
   });
 
-  // Cross-board KPIs
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Cross-board KPIs and Weekly / Monthly Ranges
+  const now = new Date();
+  const nowMs = now.getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
   const endOfToday = new Date(today);
   endOfToday.setHours(23, 59, 59, 999);
+
+  // Monday to Sunday for This Week
+  const dayOfWeek = (now.getDay() + 6) % 7;
+  const startOfThisWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
+  const endOfThisWeek = new Date(startOfThisWeek.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+
+  // Monday to Sunday for Next Week
+  const startOfNextWeek = new Date(endOfThisWeek.getTime() + 1);
+  const endOfNextWeek = new Date(startOfNextWeek.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+
+  // This Month
+  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
   const dueTodayTasks = activeTasks.filter((t) => {
     const end = new Date(t.endDate).getTime();
@@ -101,8 +116,23 @@ export const GlobalDashboardView: React.FC<GlobalDashboardViewProps> = ({
   });
 
   const overdueTasks = activeTasks.filter((t) => {
-    return new Date(t.endDate).getTime() < Date.now();
+    return new Date(t.endDate).getTime() < nowMs;
   });
+
+  const tasksThisWeek = activeTasks.filter((t) => {
+    const end = new Date(t.endDate).getTime();
+    return end >= startOfThisWeek.getTime() && end <= endOfThisWeek.getTime();
+  }).sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+
+  const tasksNextWeek = activeTasks.filter((t) => {
+    const end = new Date(t.endDate).getTime();
+    return end >= startOfNextWeek.getTime() && end <= endOfNextWeek.getTime();
+  }).sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+
+  const tasksThisMonth = activeTasks.filter((t) => {
+    const end = new Date(t.endDate).getTime();
+    return end >= startOfThisMonth.getTime() && end <= endOfThisMonth.getTime();
+  }).sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
 
   const totalEvents = activeTasks.filter((t) => isEventType(t)).length;
 
@@ -236,6 +266,166 @@ export const GlobalDashboardView: React.FC<GlobalDashboardViewProps> = ({
           <p className="text-lg sm:text-xl font-black text-purple-900 mt-1">{totalEvents}</p>
           <span className="text-[10px] text-purple-600/80 font-medium">Sincrónicos y estrictos</span>
         </div>
+      </div>
+
+      {/* Dashboard Section: Clasificación por Semanas y Mes */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-blue-100 text-blue-800 rounded-xl">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900">Planificación por Semanas y Mes</h3>
+              <p className="text-xs text-slate-500">
+                Tareas clasificadas automáticamente según la cercanía de su fecha de entrega
+              </p>
+            </div>
+          </div>
+
+          {/* Delivery Range Tab Switcher */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            {[
+              { id: 'this_week', label: 'Esta Semana', count: tasksThisWeek.length },
+              { id: 'next_week', label: 'Próxima Semana', count: tasksNextWeek.length },
+              { id: 'this_month', label: 'Este Mes', count: tasksThisMonth.length },
+              { id: 'overdue', label: 'Vencidas', count: overdueTasks.length, alert: true },
+            ].map((t) => {
+              const isSel = deliveryTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setDeliveryTab(t.id as any)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    isSel
+                      ? t.alert
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-blue-600 text-white shadow-xs'
+                      : t.alert && t.count > 0
+                      ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200/70'
+                  }`}
+                >
+                  <span>{t.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isSel
+                        ? 'bg-white/20 text-white'
+                        : t.alert && t.count > 0
+                        ? 'bg-rose-200 text-rose-800'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {t.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Task Cards Grid for Active Tab */}
+        {(() => {
+          const currentList =
+            deliveryTab === 'this_week'
+              ? tasksThisWeek
+              : deliveryTab === 'next_week'
+              ? tasksNextWeek
+              : deliveryTab === 'this_month'
+              ? tasksThisMonth
+              : overdueTasks;
+
+          if (currentList.length === 0) {
+            return (
+              <div className="py-8 text-center text-slate-400">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-600">
+                  {deliveryTab === 'overdue'
+                    ? '¡Excelente! No tienes ninguna tarea vencida.'
+                    : 'No hay tareas con entrega en este periodo.'}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Las tareas se ordenan dinámicamente según la fecha de finalización más cercana.
+                </p>
+              </div>
+            );
+          }
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {currentList.map((t) => {
+                const tBoard = getBoard(t.boardId);
+                const timeCalc = calculateTimeLevel(t.startDate, t.endDate, nowMs, t.status === 'done');
+
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => onSelectTask(t)}
+                    className="p-3 bg-white rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between gap-2 group"
+                  >
+                    <div>
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-2xs truncate max-w-[130px]"
+                          style={{ backgroundColor: tBoard.color }}
+                        >
+                          {tBoard.name}
+                        </span>
+
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] border ${timeCalc.badgeBg}`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              timeCalc.isOverdue && t.status !== 'done'
+                                ? 'bg-amber-400 animate-ping'
+                                : timeCalc.level === 'red'
+                                ? 'bg-rose-500'
+                                : 'bg-current'
+                            }`}
+                          />
+                          {timeCalc.remainingText}
+                        </span>
+                      </div>
+
+                      {/* Full title without truncation */}
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors break-words leading-snug">
+                        {t.title}
+                      </h4>
+
+                      {t.description && (
+                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 break-words">
+                          {t.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Footer Info */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        <span>
+                          {new Date(t.endDate).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+
+                      <span className="capitalize font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {t.priority}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Collision Filters and Tabs */}

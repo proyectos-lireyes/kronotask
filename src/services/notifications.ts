@@ -1,4 +1,6 @@
 import { TaskItem } from '../types';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { Capacitor } from '@capacitor/core';
 
 export interface InAppNotification {
   id: string;
@@ -80,7 +82,37 @@ class SoundService {
 
 export const soundService = new SoundService();
 
+let isChannelCreated = false;
+
+async function setupAndroidNotificationChannel() {
+  if (Capacitor.isNativePlatform() && !isChannelCreated) {
+    try {
+      await LocalNotifications.createChannel({
+        id: 'kronotask_alerts',
+        name: 'Recordatorios KronoTask',
+        description: 'Alertas de vencimiento y avisos de entrega',
+        importance: 5,
+        visibility: 1,
+        vibration: true,
+      });
+      isChannelCreated = true;
+    } catch (e) {
+      console.warn('Could not register Android notification channel:', e);
+    }
+  }
+}
+
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await LocalNotifications.requestPermissions();
+      await setupAndroidNotificationChannel();
+      return res.display === 'granted' ? 'granted' : 'denied';
+    } catch (e) {
+      console.warn('Error requesting native permissions:', e);
+    }
+  }
+
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'denied';
   }
@@ -90,7 +122,32 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return await Notification.requestPermission();
 }
 
-export function sendPushNotification(title: string, options?: NotificationOptions) {
+let notificationIdTracker = 1000;
+
+export async function sendPushNotification(title: string, options?: NotificationOptions) {
+  // If running in Capacitor Android, trigger native OS notification
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await setupAndroidNotificationChannel();
+      notificationIdTracker = (notificationIdTracker + 1) % 999999;
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: Math.floor(Date.now() % 100000) + notificationIdTracker,
+            title,
+            body: options?.body || '',
+            channelId: 'kronotask_alerts',
+            schedule: { at: new Date(Date.now() + 150) },
+          },
+        ],
+      });
+      return;
+    } catch (e) {
+      console.warn('Capacitor LocalNotification failed, falling back to web:', e);
+    }
+  }
+
+  // Web Notification fallback
   if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
     try {
       new Notification(title, {
@@ -99,7 +156,7 @@ export function sendPushNotification(title: string, options?: NotificationOption
         ...options,
       });
     } catch (e) {
-      console.warn('Error sending native notification:', e);
+      console.warn('Error sending native web notification:', e);
     }
   }
 }

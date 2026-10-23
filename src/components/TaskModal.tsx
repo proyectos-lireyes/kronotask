@@ -16,6 +16,7 @@ import { formatRecurrenceLabel } from '../utils/recurrence';
 import { ConfirmationModal } from './ConfirmationModal';
 import { checkTaskCollisionWithExisting, isEventType } from '../utils/collisionUtils';
 import { OptionPickerModal } from './OptionPickerModal';
+import { CustomDateTimePicker } from './CustomDateTimePicker';
 import {
   X,
   Calendar,
@@ -182,7 +183,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDescription('');
       setStatus(initialStatus);
       setPriority(allPriorities[1]?.id || 'media');
-      setType(allTypes[0]?.id || 'tarea');
+      setType(allTypes.find(t => t.id === 'tarea' || t.name.toLowerCase() === 'tarea')?.id || 'tarea');
       setStartDate(toDateTimeLocal(now));
       setEndDate(toDateTimeLocal(inThreeDays));
       setSelectedTags([]);
@@ -755,17 +756,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Start Date */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                        Inicio *
-                      </label>
-                      <input
-                        type="datetime-local"
+                      <CustomDateTimePicker
+                        label="Inicio"
                         required
                         value={startDate}
-                        onChange={(e) => {
-                          setStartDate(e.target.value);
+                        onChange={(newVal) => {
+                          setStartDate(newVal);
                           if (endMode === 'duration') {
-                            const d = new Date(e.target.value);
+                            const d = new Date(newVal);
                             if (durationUnit === 'minutes') d.setMinutes(d.getMinutes() + durationValue);
                             else if (durationUnit === 'hours') d.setHours(d.getHours() + durationValue);
                             else if (durationUnit === 'days') d.setDate(d.getDate() + durationValue);
@@ -775,22 +773,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             setEndDate(toDateTimeLocal(d));
                           }
                         }}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900"
                       />
                     </div>
 
                     {/* End Date (by Date or by Duration) */}
                     {endMode === 'date' ? (
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                          Fin (Fecha Límite) *
-                        </label>
-                        <input
-                          type="datetime-local"
+                        <CustomDateTimePicker
+                          label="Fin (Fecha Límite)"
                           required
                           value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900"
+                          onChange={(newVal) => setEndDate(newVal)}
                         />
                       </div>
                     ) : (
