@@ -254,26 +254,71 @@ export function checkTaskRemindersAndSchedules(
     }
   }
 
-  // 4. Task Deadlines and Custom Reminders
+  // 4. Task Start Time & Deadline Reminders
   tasks.forEach((task) => {
     if (task.status === 'done') return;
 
+    const start = new Date(task.startDate).getTime();
     const end = new Date(task.endDate).getTime();
-    const diffMinutes = Math.floor((end - now) / (60 * 1000));
 
-    // Custom offset reminders
+    const startDiffMinutes = Math.floor((start - now) / (60 * 1000));
+    const endDiffMinutes = Math.floor((end - now) / (60 * 1000));
+
+    // A) START TIME REMINDERS & NOTIFICATIONS
     if (task.reminders && task.reminders.length > 0) {
       task.reminders.forEach((rem) => {
-        const reminderKey = `rem-${task.id}-${rem.offsetMinutes}`;
-        if (!notifiedEventsCache.has(reminderKey)) {
-          if (diffMinutes <= rem.offsetMinutes && diffMinutes >= rem.offsetMinutes - 2) {
-            notifiedEventsCache.add(reminderKey);
+        const startRemKey = `rem-start-${task.id}-${rem.offsetMinutes}`;
+        if (!notifiedEventsCache.has(startRemKey)) {
+          if (startDiffMinutes <= rem.offsetMinutes && startDiffMinutes >= rem.offsetMinutes - 2) {
+            notifiedEventsCache.add(startRemKey);
             soundService.playChime('reminder');
-            sendPushNotification(`⏰ Recordatorio: ${task.title}`, {
-              body: `Faltan ${rem.offsetMinutes} minutos para la fecha límite. Prioridad: ${task.priority}`,
+            sendPushNotification(`🚀 Inicia Pronto: ${task.title}`, {
+              body: `Faltan ${rem.offsetMinutes} minutos para iniciar la tarea programada.`,
             });
             onInAppNotification({
-              id: `notif-${Date.now()}-${Math.random()}`,
+              id: `notif-start-${Date.now()}-${Math.random()}`,
+              title: `🚀 Inicia Pronto: ${task.title}`,
+              body: `Tu tarea está programada para comenzar en ${rem.offsetMinutes} minutos.`,
+              type: 'reminder',
+              timestamp: new Date().toISOString(),
+              taskId: task.id,
+            });
+          }
+        }
+      });
+    }
+
+    // Task Start Time Exact Alert
+    const startExactKey = `start-exact-${task.id}`;
+    if (startDiffMinutes <= 0 && startDiffMinutes >= -3 && !notifiedEventsCache.has(startExactKey)) {
+      notifiedEventsCache.add(startExactKey);
+      soundService.playChime('reminder');
+      sendPushNotification(`▶️ ¡Hora de Iniciar!: ${task.title}`, {
+        body: `Llegó la hora de inicio programada. ¡Comienza a trabajar en ella!`,
+      });
+      onInAppNotification({
+        id: `notif-startexact-${Date.now()}-${Math.random()}`,
+        title: `▶️ ¡Hora de Iniciar Tarea!`,
+        body: `"${task.title}" debe comenzar ahora mismo.`,
+        type: 'info',
+        timestamp: new Date().toISOString(),
+        taskId: task.id,
+      });
+    }
+
+    // B) END TIME / DEADLINE REMINDERS & NOTIFICATIONS
+    if (task.reminders && task.reminders.length > 0) {
+      task.reminders.forEach((rem) => {
+        const endRemKey = `rem-end-${task.id}-${rem.offsetMinutes}`;
+        if (!notifiedEventsCache.has(endRemKey)) {
+          if (endDiffMinutes <= rem.offsetMinutes && endDiffMinutes >= rem.offsetMinutes - 2) {
+            notifiedEventsCache.add(endRemKey);
+            soundService.playChime('reminder');
+            sendPushNotification(`⏰ Recordatorio Vencimiento: ${task.title}`, {
+              body: `Faltan ${rem.offsetMinutes} minutos para la fecha límite de entrega.`,
+            });
+            onInAppNotification({
+              id: `notif-end-${Date.now()}-${Math.random()}`,
               title: `Recordatorio: ${task.title}`,
               body: `Faltan ${rem.offsetMinutes} minutos para la entrega.`,
               type: 'reminder',
@@ -285,9 +330,9 @@ export function checkTaskRemindersAndSchedules(
       });
     }
 
-    // Imminent warning (< 15 min)
+    // Imminent warning (< 15 min to deadline)
     const imminentKey = `imminent-${task.id}`;
-    if (diffMinutes <= 15 && diffMinutes > 0 && !notifiedEventsCache.has(imminentKey)) {
+    if (endDiffMinutes <= 15 && endDiffMinutes > 0 && !notifiedEventsCache.has(imminentKey)) {
       notifiedEventsCache.add(imminentKey);
       soundService.playChime('reminder');
       sendPushNotification(`⚠️ Vencimiento Próximo: ${task.title}`, {
@@ -296,7 +341,7 @@ export function checkTaskRemindersAndSchedules(
       onInAppNotification({
         id: `notif-${Date.now()}-${Math.random()}`,
         title: `Vencimiento Próximo: ${task.title}`,
-        body: `Quedan ${diffMinutes} minutos para vencer el plazo.`,
+        body: `Quedan ${endDiffMinutes} minutos para vencer el plazo.`,
         type: 'warning',
         timestamp: new Date().toISOString(),
         taskId: task.id,
@@ -322,3 +367,95 @@ export function checkTaskRemindersAndSchedules(
     }
   });
 }
+
+/**
+ * Schedules Native Android Local Notifications in advance using Capacitor LocalNotifications plugin
+ */
+export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    await setupAndroidNotificationChannel();
+
+    // Cancel previous pending notifications
+    const pending = await LocalNotifications.getPending();
+    if (pending.notifications.length > 0) {
+      await LocalNotifications.cancel(pending);
+    }
+
+    const notificationsToSchedule: any[] = [];
+    const now = Date.now();
+    let idCounter = 1000;
+
+    tasks.forEach((task) => {
+      if (task.status === 'done') return;
+
+      const startTime = new Date(task.startDate).getTime();
+      const endTime = new Date(task.endDate).getTime();
+
+      // 1. Task Start Exact Time Notification
+      if (startTime > now) {
+        notificationsToSchedule.push({
+          id: idCounter++,
+          title: `▶️ ¡Hora de Iniciar!: ${task.title}`,
+          body: `Llegó la hora de inicio de tu tarea "${task.title}".`,
+          channelId: 'kronotask_alerts',
+          schedule: { at: new Date(startTime) },
+        });
+      }
+
+      // 2. Task Start Reminders (e.g. 5m, 15m, 30m before start)
+      if (task.reminders) {
+        task.reminders.forEach((rem) => {
+          const remTime = startTime - rem.offsetMinutes * 60 * 1000;
+          if (remTime > now) {
+            notificationsToSchedule.push({
+              id: idCounter++,
+              title: `🚀 Recordatorio de Inicio: ${task.title}`,
+              body: `Faltan ${rem.offsetMinutes} minutos para iniciar "${task.title}".`,
+              channelId: 'kronotask_alerts',
+              schedule: { at: new Date(remTime) },
+            });
+          }
+        });
+      }
+
+      // 3. Task Deadline / End Time
+      if (endTime > now) {
+        notificationsToSchedule.push({
+          id: idCounter++,
+          title: `⚠️ Fecha Límite de Entrega: ${task.title}`,
+          body: `La tarea "${task.title}" debe entregarse ahora.`,
+          channelId: 'kronotask_alerts',
+          schedule: { at: new Date(endTime) },
+        });
+      }
+
+      // 4. Task Deadline Reminders
+      if (task.reminders) {
+        task.reminders.forEach((rem) => {
+          const remEnd = endTime - rem.offsetMinutes * 60 * 1000;
+          if (remEnd > now) {
+            notificationsToSchedule.push({
+              id: idCounter++,
+              title: `⏰ Recordatorio de Entrega: ${task.title}`,
+              body: `Faltan ${rem.offsetMinutes} minutos para vencer "${task.title}".`,
+              channelId: 'kronotask_alerts',
+              schedule: { at: new Date(remEnd) },
+            });
+          }
+        });
+      }
+    });
+
+    if (notificationsToSchedule.length > 0) {
+      // Schedule max 50 pending notifications to keep within Android OS limits
+      await LocalNotifications.schedule({
+        notifications: notificationsToSchedule.slice(0, 50),
+      });
+    }
+  } catch (e) {
+    console.warn('Error scheduling native local notifications:', e);
+  }
+}
+

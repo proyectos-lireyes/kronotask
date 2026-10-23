@@ -37,6 +37,7 @@ import { getBiometricRecord, isVaultLocked, setVaultLocked } from './services/bi
 import {
   InAppNotification,
   checkTaskRemindersAndSchedules,
+  scheduleTaskOSNotifications,
   requestNotificationPermission,
   soundService,
 } from './services/notifications';
@@ -222,6 +223,7 @@ export default function App() {
   const updateTasks = (newTasks: TaskItem[]) => {
     setTasks(newTasks);
     saveTasks(newTasks);
+    scheduleTaskOSNotifications(newTasks);
   };
 
   const handleGoogleSignIn = async () => {

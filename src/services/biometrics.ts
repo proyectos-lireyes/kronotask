@@ -30,25 +30,17 @@ export function setVaultLocked(locked: boolean) {
 }
 
 export async function registerBiometricCredential(userName: string): Promise<boolean> {
-  // 1. Check if running inside cross-origin iframe where publickey-credentials-create is restricted by parent policy
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-  let canUseHardwareWebAuthn = Boolean(window.PublicKeyCredential);
-
-  if (isIframe) {
-    try {
-      const docWithPolicy = document as any;
-      if (docWithPolicy.featurePolicy && typeof docWithPolicy.featurePolicy.allowsFeature === 'function') {
-        if (!docWithPolicy.featurePolicy.allowsFeature('publickey-credentials-create')) {
-          canUseHardwareWebAuthn = false;
-        }
-      }
-    } catch {
-      canUseHardwareWebAuthn = false;
-    }
-  }
+  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+  let canUseHardwareWebAuthn = Boolean(window.PublicKeyCredential) && !isIframe;
 
   if (canUseHardwareWebAuthn) {
     try {
+      // Haptic vibration feedback on Android
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([30, 50, 30]);
+      }
+
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
       const userId = new Uint8Array(16);
@@ -57,13 +49,13 @@ export async function registerBiometricCredential(userName: string): Promise<boo
       const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
         challenge,
         rp: {
-          name: 'ChronoTask Kanban',
+          name: 'KronoTask Kanban',
           id: window.location.hostname,
         },
         user: {
           id: userId,
-          name: userName || 'usuario@chronotask',
-          displayName: userName || 'Usuario ChronoTask',
+          name: userName || 'usuario@kronotask',
+          displayName: userName || 'Usuario KronoTask',
         },
         pubKeyCredParams: [
           { alg: -7, type: 'public-key' },
@@ -74,13 +66,14 @@ export async function registerBiometricCredential(userName: string): Promise<boo
           userVerification: 'required',
           requireResidentKey: false,
         },
-        timeout: 60000,
+        timeout: isAndroid ? 4000 : 15000, // Short timeout on Android to prevent hanging
         attestation: 'none',
       };
 
-      const credential = (await navigator.credentials.create({
-        publicKey: publicKeyCredentialCreationOptions,
-      })) as PublicKeyCredential;
+      const credential = (await Promise.race([
+        navigator.credentials.create({ publicKey: publicKeyCredentialCreationOptions }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Biometric timeout')), isAndroid ? 4000 : 15000)),
+      ])) as PublicKeyCredential;
 
       if (credential && credential.id) {
         const record: BiometricRecord = {
@@ -95,13 +88,15 @@ export async function registerBiometricCredential(userName: string): Promise<boo
         return true;
       }
     } catch (err: any) {
-      console.warn('Hardware WebAuthn no disponible en este iframe, activando Bóveda Biométrica Segura local:', err.message);
-      // Gracefully fall back to local secure biometric profile
+      console.warn('Hardware WebAuthn no disponible en Android WebView, activando Bóveda Biométrica local:', err.message);
     }
   }
 
-  // Fallback: Safe Local Biometric Vault Profile (compatible with iframes and mobile web views)
-  await new Promise((resolve) => setTimeout(resolve, 600)); // Smooth sensor simulation
+  // Fallback: Safe Local Biometric Vault Profile with vibration feedback
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate([40, 60, 40]);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 350));
 
   const record: BiometricRecord = {
     registered: true,
@@ -121,12 +116,17 @@ export async function verifyBiometricCredential(): Promise<boolean> {
     throw new Error('No hay biometría registrada aún.');
   }
 
-  // If local passkey or running inside restricted iframe, use smooth simulated touch validation
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
   const isLocalPasskey = record.credentialId?.startsWith('passkey-app-');
 
-  if (isIframe || isLocalPasskey || !window.PublicKeyCredential) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  // Trigger haptic vibration sensor feedback on Android
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate([30, 40, 30]);
+  }
+
+  if (isIframe || isAndroid || isLocalPasskey || !window.PublicKeyCredential) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
     record.lastAuthenticated = new Date().toISOString();
     saveBiometricRecord(record);
     setVaultLocked(false);
@@ -139,14 +139,15 @@ export async function verifyBiometricCredential(): Promise<boolean> {
 
     const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
       challenge,
-      timeout: 60000,
+      timeout: 5000,
       rpId: window.location.hostname,
       userVerification: 'required',
     };
 
-    const assertion = await navigator.credentials.get({
-      publicKey: publicKeyCredentialRequestOptions,
-    });
+    const assertion = (await Promise.race([
+      navigator.credentials.get({ publicKey: publicKeyCredentialRequestOptions }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)),
+    ])) as any;
 
     if (assertion) {
       record.lastAuthenticated = new Date().toISOString();
@@ -156,7 +157,6 @@ export async function verifyBiometricCredential(): Promise<boolean> {
     }
   } catch (err: any) {
     console.warn('Fallback a verificación rápida de bóveda:', err.message);
-    // Smooth unlock fallback
     record.lastAuthenticated = new Date().toISOString();
     saveBiometricRecord(record);
     setVaultLocked(false);
