@@ -1,9 +1,10 @@
 import { Board, TaskItem, CustomTag, CustomTypeDefinition, CustomPriorityDefinition } from '../types';
 
 export interface BoardExportPackage {
-  format: 'kronotask-board-v1';
+  format: 'kronotask-board-v1' | 'kronotask-multi-v1';
   exportedAt: string;
-  board: Board;
+  board?: Board;
+  boards?: Board[];
   tasks: TaskItem[];
   tags?: CustomTag[];
   types?: CustomTypeDefinition[];
@@ -11,28 +12,42 @@ export interface BoardExportPackage {
 }
 
 /**
- * Encodes a board and its associated tasks into a robust UTF-8 Base64 string.
+ * Encodes a single board or ALL boards into a robust UTF-8 Base64 string.
  */
 export function exportBoardToBase64(
-  board: Board,
+  board: Board | 'all',
+  allBoards: Board[],
   allTasks: TaskItem[],
   allTags?: CustomTag[],
   allTypes?: CustomTypeDefinition[],
   allPriorities?: CustomPriorityDefinition[]
 ): string {
-  const boardTasks = allTasks.filter((t) => t.boardId === board.id || (!t.boardId && board.id === 'board-work'));
+  let pkg: BoardExportPackage;
 
-  const pkg: BoardExportPackage = {
-    format: 'kronotask-board-v1',
-    exportedAt: new Date().toISOString(),
-    board: {
-      ...board,
-    },
-    tasks: boardTasks,
-    tags: allTags,
-    types: allTypes,
-    priorities: allPriorities,
-  };
+  if (board === 'all') {
+    pkg = {
+      format: 'kronotask-multi-v1',
+      exportedAt: new Date().toISOString(),
+      boards: allBoards,
+      tasks: allTasks,
+      tags: allTags,
+      types: allTypes,
+      priorities: allPriorities,
+    };
+  } else {
+    const boardTasks = allTasks.filter(
+      (t) => t.boardId === board.id || (!t.boardId && board.id === 'board-work')
+    );
+    pkg = {
+      format: 'kronotask-board-v1',
+      exportedAt: new Date().toISOString(),
+      board: { ...board },
+      tasks: boardTasks,
+      tags: allTags,
+      types: allTypes,
+      priorities: allPriorities,
+    };
+  }
 
   const jsonStr = JSON.stringify(pkg);
   const bytes = new TextEncoder().encode(jsonStr);
@@ -61,8 +76,13 @@ export function parseBoardFromBase64(base64Str: string): BoardExportPackage {
     const jsonStr = new TextDecoder().decode(bytes);
     const parsed = JSON.parse(jsonStr) as BoardExportPackage;
 
-    if (!parsed || !parsed.board || !parsed.board.name || !Array.isArray(parsed.tasks)) {
+    if (!parsed || (!parsed.board && !parsed.boards) || !Array.isArray(parsed.tasks)) {
       throw new Error('El contenido decodificado no contiene una estructura de tablero válida.');
+    }
+
+    // Normalization if single board
+    if (parsed.board && !parsed.boards) {
+      parsed.boards = [parsed.board];
     }
 
     return parsed;

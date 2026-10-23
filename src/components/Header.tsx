@@ -205,9 +205,9 @@ export const Header: React.FC<HeaderProps> = ({
                         <Smartphone className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-slate-800">Actualizar APK / Versión</p>
+                        <p className="text-xs font-bold text-slate-800">Comprobar Actualizaciones</p>
                         <p className="text-[10px] text-slate-400">
-                          CI/CD GitHub Releases & Instalador Android
+                          Verificar si hay una nueva versión disponible
                         </p>
                       </div>
                     </div>

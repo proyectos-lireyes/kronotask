@@ -215,9 +215,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Export handlers
   const handleGenerateExport = () => {
-    const boardToExport = boards.find((b) => b.id === selectedExportBoardId) || boards[0];
-    if (!boardToExport) return;
-    const base64 = exportBoardToBase64(boardToExport, allTasks, tags, types, priorities);
+    let base64 = '';
+    if (selectedExportBoardId === 'all') {
+      base64 = exportBoardToBase64('all', boards, allTasks, tags, types, priorities);
+    } else {
+      const boardToExport = boards.find((b) => b.id === selectedExportBoardId) || boards[0];
+      if (!boardToExport) return;
+      base64 = exportBoardToBase64(boardToExport, boards, allTasks, tags, types, priorities);
+    }
     setGeneratedBase64(base64);
     setCopiedBase64(false);
   };
@@ -231,12 +236,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleDownloadExportFile = () => {
     if (!generatedBase64) return;
-    const boardToExport = boards.find((b) => b.id === selectedExportBoardId) || boards[0];
+    const isAll = selectedExportBoardId === 'all';
+    const boardToExport = boards.find((b) => b.id === selectedExportBoardId);
+    const filename = isAll
+      ? 'kronotask-respaldo-completo-todos-los-tableros.kronotask'
+      : `kronotask-${(boardToExport?.name || 'tablero').toLowerCase().replace(/\s+/g, '-')}.kronotask`;
+
     const blob = new Blob([generatedBase64], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `kronotask-${(boardToExport?.name || 'tablero').toLowerCase().replace(/\s+/g, '-')}.kronotask`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -249,18 +259,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setImportSuccessMsg(null);
     try {
       const parsed = parseBoardFromBase64(importBase64Input);
+      if (!parsed.board && parsed.boards && parsed.boards.length > 0) {
+        parsed.board = parsed.boards[0];
+      }
       setParsedPackage(parsed);
 
-      // Check if board with same name exists
+      const targetName = parsed.board?.name || 'Tablero';
       const match = boards.find(
-        (b) => b.name.trim().toLowerCase() === parsed.board.name.trim().toLowerCase()
+        (b) => b.name.trim().toLowerCase() === targetName.trim().toLowerCase()
       );
       if (match) {
-        setImportResolution('merge'); // Suggest merge or overwrite
+        setImportResolution('merge');
       } else {
         setImportResolution('new_board');
       }
-      setImportNewBoardName(`${parsed.board.name} (Importado)`);
+      setImportNewBoardName(`${targetName} (Importado)`);
     } catch (e: any) {
       setImportError(e.message || 'Código Base64 no válido.');
       setParsedPackage(null);
@@ -283,22 +296,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleExecuteImport = () => {
     if (!parsedPackage) return;
-    const matchingBoard = boards.find(
-      (b) => b.name.trim().toLowerCase() === parsedPackage.board.name.trim().toLowerCase()
-    );
 
-    onImportBoard({
-      mode: importResolution,
-      targetBoardId: matchingBoard?.id || boards[0]?.id,
-      newBoardName: importNewBoardName.trim() || `${parsedPackage.board.name} (Importado)`,
-      board: parsedPackage.board,
-      tasks: parsedPackage.tasks,
-      suffix: importSuffix,
-    });
+    if (parsedPackage.format === 'kronotask-multi-v1' && parsedPackage.boards && parsedPackage.boards.length > 0) {
+      parsedPackage.boards.forEach((b) => {
+        const bTasks = parsedPackage.tasks.filter((t) => t.boardId === b.id);
+        onImportBoard({
+          mode: 'new_board',
+          targetBoardId: b.id,
+          newBoardName: b.name,
+          board: b,
+          tasks: bTasks.length > 0 ? bTasks : parsedPackage.tasks,
+          suffix: '',
+        });
+      });
+      setImportSuccessMsg(
+        `✓ Se importaron exitosamente ${parsedPackage.boards.length} tableros y ${parsedPackage.tasks.length} tareas.`
+      );
+    } else {
+      const targetBoard = parsedPackage.board || (parsedPackage.boards && parsedPackage.boards[0]);
+      if (!targetBoard) return;
+      const matchingBoard = boards.find(
+        (b) => b.name.trim().toLowerCase() === targetBoard.name.trim().toLowerCase()
+      );
 
-    setImportSuccessMsg(
-      `✓ Tablero "${parsedPackage.board.name}" importado con éxito (${parsedPackage.tasks.length} tareas procesadas).`
-    );
+      onImportBoard({
+        mode: importResolution,
+        targetBoardId: matchingBoard?.id || boards[0]?.id,
+        newBoardName: importNewBoardName.trim() || `${targetBoard.name} (Importado)`,
+        board: targetBoard,
+        tasks: parsedPackage.tasks,
+        suffix: importSuffix,
+      });
+
+      setImportSuccessMsg(
+        `✓ Tablero "${targetBoard.name}" importado con éxito (${parsedPackage.tasks.length} tareas procesadas).`
+      );
+    }
+
     setParsedPackage(null);
     setImportBase64Input('');
   };
@@ -492,13 +526,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                       className="w-full text-xs font-bold p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                     >
+                      <option value="all">
+                        ⭐ TODOS los Tableros ({boards.length} tableros, {allTasks.length} tareas en total)
+                      </option>
                       {boards.map((b) => {
                         const count = allTasks.filter(
                           (t) => t.boardId === b.id || (!t.boardId && b.id === 'board-work')
                         ).length;
                         return (
                           <option key={b.id} value={b.id}>
-                            {b.name} ({count} tareas)
+                            Tablero: {b.name} ({count} tareas)
                           </option>
                         );
                       })}
@@ -621,9 +658,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
                             <span
                               className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: parsedPackage.board.color }}
+                              style={{ backgroundColor: (parsedPackage.board || parsedPackage.boards?.[0])?.color || '#3b82f6' }}
                             />
-                            {parsedPackage.board.name}
+                            {(parsedPackage.board || parsedPackage.boards?.[0])?.name || 'Tablero'}
                           </h4>
                         </div>
                         <span className="px-2.5 py-1 bg-white border border-indigo-200 text-indigo-900 rounded-xl text-xs font-black shadow-2xs">

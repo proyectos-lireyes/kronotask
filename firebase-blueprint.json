@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "UserData": {
+      "title": "UserData",
+      "description": "User boards, tasks, types, priorities, and tags backup data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "boards": { "type": "array" },
+        "tasks": { "type": "array" },
+        "tags": { "type": "array" },
+        "customTypes": { "type": "array" },
+        "customPriorities": { "type": "array" }
+      },
+      "required": ["uid", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/user_data/{userId}": {
+      "schema": "UserData",
+      "description": "User specific application data backup"
+    }
+  }
+}

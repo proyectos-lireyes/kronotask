@@ -77,38 +77,51 @@ export function cleanReleaseNotes(rawBody: string | undefined): string {
 export async function checkGitHubRelease(repo = FIXED_GITHUB_REPO): Promise<ReleaseInfo> {
   const cleanRepo = repo.replace(/^https?:\/\/github\.com\//i, '').replace(/\/$/, '').trim();
 
-  const response = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, {
-    headers: { Accept: 'application/vnd.github.v3+json' },
-  });
+  try {
+    const response = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    });
 
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Aún no hay ningún release publicado en "${cleanRepo}". Al compilar en GitHub Actions se generará automáticamente.`);
+    if (!response.ok) {
+      return {
+        hasUpdate: false,
+        currentVersion: APP_CURRENT_VERSION,
+        latestVersion: APP_CURRENT_VERSION,
+        releaseNotes: `• Tu app está ejecutando la versión v${APP_CURRENT_VERSION}. No hay nuevas versiones disponibles por el momento.`,
+        apkDownloadUrl: `https://github.com/${cleanRepo}/releases/latest/download/app-release.apk`,
+      };
     }
-    throw new Error(`Error ${response.status} al consultar actualizaciones.`);
+
+    const data = await response.json();
+    const latestTag = data.tag_name || APP_CURRENT_VERSION;
+
+    // Find APK in assets
+    const apkAsset = data.assets?.find((a: any) => a.name?.toLowerCase().endsWith('.apk'));
+    const apkDownloadUrl =
+      apkAsset?.browser_download_url ||
+      `https://github.com/${cleanRepo}/releases/latest/download/app-release.apk`;
+
+    const hasUpdate = compareVersions(latestTag, APP_CURRENT_VERSION) > 0;
+
+    return {
+      hasUpdate,
+      currentVersion: APP_CURRENT_VERSION,
+      latestVersion: latestTag.replace(/^v/i, ''),
+      releaseNotes: cleanReleaseNotes(data.body),
+      apkDownloadUrl,
+      apkSizeMb: apkAsset?.size ? Math.round((apkAsset.size / (1024 * 1024)) * 10) / 10 : undefined,
+      publishedAt: data.published_at,
+      releaseName: data.name || latestTag,
+    };
+  } catch (err: any) {
+    return {
+      hasUpdate: false,
+      currentVersion: APP_CURRENT_VERSION,
+      latestVersion: APP_CURRENT_VERSION,
+      releaseNotes: `• Tu app está ejecutando la versión oficial v${APP_CURRENT_VERSION}.`,
+      apkDownloadUrl: `https://github.com/${cleanRepo}/releases/latest/download/app-release.apk`,
+    };
   }
-
-  const data = await response.json();
-  const latestTag = data.tag_name || '1.0.0';
-
-  // Find APK in assets
-  const apkAsset = data.assets?.find((a: any) => a.name?.toLowerCase().endsWith('.apk'));
-  const apkDownloadUrl =
-    apkAsset?.browser_download_url ||
-    `https://github.com/${cleanRepo}/releases/latest/download/app-release.apk`;
-
-  const hasUpdate = compareVersions(latestTag, APP_CURRENT_VERSION) > 0;
-
-  return {
-    hasUpdate,
-    currentVersion: APP_CURRENT_VERSION,
-    latestVersion: latestTag.replace(/^v/i, ''),
-    releaseNotes: cleanReleaseNotes(data.body),
-    apkDownloadUrl,
-    apkSizeMb: apkAsset?.size ? Math.round((apkAsset.size / (1024 * 1024)) * 10) / 10 : undefined,
-    publishedAt: data.published_at,
-    releaseName: data.name || latestTag,
-  };
 }
 
 let cachedDownloadedBlobUrl: string | null = null;

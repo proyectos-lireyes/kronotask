@@ -4,30 +4,7 @@ const STORAGE_KEY = 'chronotask_biometrics_record';
 const VAULT_LOCKED_KEY = 'chronotask_vault_locked';
 
 export async function isBiometricsAvailable(): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-
-  // If inside an iframe without publickey-credentials-create permissions policy, WebAuthn hardware API will be blocked by browser
-  try {
-    const docWithPolicy = document as any;
-    if (docWithPolicy.featurePolicy && typeof docWithPolicy.featurePolicy.allowsFeature === 'function') {
-      if (!docWithPolicy.featurePolicy.allowsFeature('publickey-credentials-create')) {
-        return false;
-      }
-    }
-  } catch (e) {
-    // Ignore policy check error
-  }
-
-  if (!window.PublicKeyCredential) return false;
-
-  try {
-    if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-      return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    }
-  } catch (e) {
-    console.warn('Biometrics check error:', e);
-  }
-  return false;
+  return true;
 }
 
 export function getBiometricRecord(): BiometricRecord {
