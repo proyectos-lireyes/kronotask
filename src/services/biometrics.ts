@@ -1,9 +1,19 @@
 import { BiometricRecord } from '../types';
+import { NativeBiometric } from '@capgo/capacitor-native-biometric';
+import { Capacitor } from '@capacitor/core';
 
 const STORAGE_KEY = 'chronotask_biometrics_record';
 const VAULT_LOCKED_KEY = 'chronotask_vault_locked';
 
 export async function isBiometricsAvailable(): Promise<boolean> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await NativeBiometric.isAvailable();
+      return res.isAvailable;
+    } catch (e) {
+      console.warn('Native biometric availability check error:', e);
+    }
+  }
   return true;
 }
 
@@ -30,15 +40,38 @@ export function setVaultLocked(locked: boolean) {
 }
 
 export async function registerBiometricCredential(userName: string): Promise<boolean> {
-  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const canUseHardwareWebAuthn = Boolean(window.PublicKeyCredential) && !isIframe;
+  const isNative = Capacitor.isNativePlatform();
 
-  if (canUseHardwareWebAuthn) {
+  if (isNative) {
     try {
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate([30, 50, 30]);
-      }
+      // Trigger native Android / iOS System Biometric / Fingerprint / PIN prompt
+      await NativeBiometric.verifyIdentity({
+        reason: 'Registrar la huella dactilar o PIN del dispositivo para KronoTask',
+        title: 'Bóveda Biométrica KronoTask',
+        subtitle: 'Lector de Huella y PIN del Sistema',
+        description: 'Escanear huella dactilar o ingresar PIN configurado en tu Android',
+      });
 
+      const record: BiometricRecord = {
+        registered: true,
+        credentialId: `native-biometric-${Date.now()}`,
+        userName,
+        registeredAt: new Date().toISOString(),
+        lastAuthenticated: new Date().toISOString(),
+      };
+      saveBiometricRecord(record);
+      setVaultLocked(false);
+      return true;
+    } catch (err: any) {
+      console.warn('Native biometric registration failed or cancelled:', err);
+      throw new Error(`Huella o PIN no reconocido: ${err.message || 'Operación cancelada por el usuario'}`);
+    }
+  }
+
+  // Web / Browser WebAuthn fallback
+  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+  if (!isIframe && window.PublicKeyCredential) {
+    try {
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
       const userId = new Uint8Array(16);
@@ -85,15 +118,11 @@ export async function registerBiometricCredential(userName: string): Promise<boo
         return true;
       }
     } catch (err: any) {
-      console.warn('Llamada a biometría nativa falló o fue cancelada:', err.message);
-      throw new Error(`Error en lectura biométrica/PIN: ${err.message || 'Huella o PIN no reconocido'}`);
+      console.warn('WebAuthn registration error:', err);
     }
   }
 
-  // Fallback if WebAuthn not available on browser environment
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    navigator.vibrate([40, 60, 40]);
-  }
+  // Web vault profile fallback
   const record: BiometricRecord = {
     registered: true,
     credentialId: `passkey-app-${Date.now()}`,
@@ -112,12 +141,31 @@ export async function verifyBiometricCredential(): Promise<boolean> {
     throw new Error('No hay biometría registrada aún.');
   }
 
+  const isNative = Capacitor.isNativePlatform();
+
+  if (isNative) {
+    try {
+      // Trigger native Android System Fingerprint & PIN prompt modal
+      await NativeBiometric.verifyIdentity({
+        reason: 'Desbloquear acceso a tus tableros y tareas',
+        title: 'Bóveda Biométrica KronoTask',
+        subtitle: 'Autenticación del Sistema',
+        description: 'Usa tu huella dactilar o el PIN configurado en tu Android',
+      });
+
+      record.lastAuthenticated = new Date().toISOString();
+      saveBiometricRecord(record);
+      setVaultLocked(false);
+      return true;
+    } catch (err: any) {
+      console.warn('Native biometric verification failed:', err);
+      throw new Error(`Verificación fallida: ${err.message || 'Huella dactilar o PIN no coinciden'}`);
+    }
+  }
+
+  // Web Browser WebAuthn fallback
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
   const isLocalPasskey = record.credentialId?.startsWith('passkey-app-');
-
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    navigator.vibrate([30, 40, 30]);
-  }
 
   if (!isIframe && !isLocalPasskey && window.PublicKeyCredential) {
     try {
@@ -142,13 +190,12 @@ export async function verifyBiometricCredential(): Promise<boolean> {
         return true;
       }
     } catch (err: any) {
-      console.warn('Verificación biométrica del sistema falló:', err.message);
-      throw new Error(`Verificación fallida: ${err.message || 'Huella o PIN incorrecto'}`);
+      console.warn('WebAuthn verification error:', err);
+      throw new Error(`Error de lectura biométrica: ${err.message || 'Huella no reconocida'}`);
     }
   }
 
-  // Local PIN / Vault verification
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  // Local fallback
   record.lastAuthenticated = new Date().toISOString();
   saveBiometricRecord(record);
   setVaultLocked(false);
