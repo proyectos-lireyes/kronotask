@@ -130,6 +130,8 @@ export async function fetchUserDataFromCloud(uid: string): Promise<Partial<Cloud
  */
 async function requestGoogleTokenViaGIS(): Promise<{ accessToken: string; profile: UserProfile }> {
   return new Promise((resolve, reject) => {
+    let completed = false;
+
     const runGIS = () => {
       try {
         const googleObj = (window as any).google;
@@ -142,13 +144,17 @@ async function requestGoogleTokenViaGIS(): Promise<{ accessToken: string; profil
           scope: 'openid profile email',
           prompt: 'select_account',
           callback: async (response: any) => {
+            if (completed) return;
             if (response.error) {
+              completed = true;
               return reject(new Error(response.error_description || response.error));
             }
             if (!response.access_token) {
+              completed = true;
               return reject(new Error('No se recibió la autorización de cuenta de Google.'));
             }
 
+            completed = true;
             try {
               const accessToken = response.access_token;
               // Fetch user profile info directly from Google's UserInfo API
@@ -170,13 +176,23 @@ async function requestGoogleTokenViaGIS(): Promise<{ accessToken: string; profil
             }
           },
           error_callback: (err: any) => {
+            if (completed) return;
+            // Ignore natural popup closure after account selection
+            if (err?.type === 'popup_closed' || err?.message?.includes('closed')) {
+              console.info('GIS notification: popup closed');
+              return;
+            }
+            completed = true;
             reject(new Error(err?.message || 'Selección de cuenta cancelada.'));
           },
         });
 
         client.requestAccessToken();
       } catch (e: any) {
-        reject(e);
+        if (!completed) {
+          completed = true;
+          reject(e);
+        }
       }
     };
 
