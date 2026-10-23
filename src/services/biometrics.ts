@@ -31,12 +31,10 @@ export function setVaultLocked(locked: boolean) {
 
 export async function registerBiometricCredential(userName: string): Promise<boolean> {
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
-  let canUseHardwareWebAuthn = Boolean(window.PublicKeyCredential) && !isIframe;
+  const canUseHardwareWebAuthn = Boolean(window.PublicKeyCredential) && !isIframe;
 
   if (canUseHardwareWebAuthn) {
     try {
-      // Haptic vibration feedback on Android
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         navigator.vibrate([30, 50, 30]);
       }
@@ -66,14 +64,13 @@ export async function registerBiometricCredential(userName: string): Promise<boo
           userVerification: 'required',
           requireResidentKey: false,
         },
-        timeout: isAndroid ? 4000 : 15000, // Short timeout on Android to prevent hanging
+        timeout: 60000,
         attestation: 'none',
       };
 
-      const credential = (await Promise.race([
-        navigator.credentials.create({ publicKey: publicKeyCredentialCreationOptions }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Biometric timeout')), isAndroid ? 4000 : 15000)),
-      ])) as PublicKeyCredential;
+      const credential = (await navigator.credentials.create({
+        publicKey: publicKeyCredentialCreationOptions,
+      })) as PublicKeyCredential;
 
       if (credential && credential.id) {
         const record: BiometricRecord = {
@@ -88,16 +85,15 @@ export async function registerBiometricCredential(userName: string): Promise<boo
         return true;
       }
     } catch (err: any) {
-      console.warn('Hardware WebAuthn no disponible en Android WebView, activando Bóveda Biométrica local:', err.message);
+      console.warn('Llamada a biometría nativa falló o fue cancelada:', err.message);
+      throw new Error(`Error en lectura biométrica/PIN: ${err.message || 'Huella o PIN no reconocido'}`);
     }
   }
 
-  // Fallback: Safe Local Biometric Vault Profile with vibration feedback
+  // Fallback if WebAuthn not available on browser environment
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
     navigator.vibrate([40, 60, 40]);
   }
-  await new Promise((resolve) => setTimeout(resolve, 350));
-
   const record: BiometricRecord = {
     registered: true,
     credentialId: `passkey-app-${Date.now()}`,
@@ -117,53 +113,46 @@ export async function verifyBiometricCredential(): Promise<boolean> {
   }
 
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
   const isLocalPasskey = record.credentialId?.startsWith('passkey-app-');
 
-  // Trigger haptic vibration sensor feedback on Android
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
     navigator.vibrate([30, 40, 30]);
   }
 
-  if (isIframe || isAndroid || isLocalPasskey || !window.PublicKeyCredential) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    record.lastAuthenticated = new Date().toISOString();
-    saveBiometricRecord(record);
-    setVaultLocked(false);
-    return true;
-  }
+  if (!isIframe && !isLocalPasskey && window.PublicKeyCredential) {
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
 
-  try {
-    const challenge = new Uint8Array(32);
-    window.crypto.getRandomValues(challenge);
+      const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
+        challenge,
+        timeout: 60000,
+        rpId: window.location.hostname,
+        userVerification: 'required',
+      };
 
-    const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
-      challenge,
-      timeout: 5000,
-      rpId: window.location.hostname,
-      userVerification: 'required',
-    };
+      const assertion = await navigator.credentials.get({
+        publicKey: publicKeyCredentialRequestOptions,
+      });
 
-    const assertion = (await Promise.race([
-      navigator.credentials.get({ publicKey: publicKeyCredentialRequestOptions }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)),
-    ])) as any;
-
-    if (assertion) {
-      record.lastAuthenticated = new Date().toISOString();
-      saveBiometricRecord(record);
-      setVaultLocked(false);
-      return true;
+      if (assertion) {
+        record.lastAuthenticated = new Date().toISOString();
+        saveBiometricRecord(record);
+        setVaultLocked(false);
+        return true;
+      }
+    } catch (err: any) {
+      console.warn('Verificación biométrica del sistema falló:', err.message);
+      throw new Error(`Verificación fallida: ${err.message || 'Huella o PIN incorrecto'}`);
     }
-  } catch (err: any) {
-    console.warn('Fallback a verificación rápida de bóveda:', err.message);
-    record.lastAuthenticated = new Date().toISOString();
-    saveBiometricRecord(record);
-    setVaultLocked(false);
-    return true;
   }
 
-  return false;
+  // Local PIN / Vault verification
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  record.lastAuthenticated = new Date().toISOString();
+  saveBiometricRecord(record);
+  setVaultLocked(false);
+  return true;
 }
 
 export function clearBiometrics() {

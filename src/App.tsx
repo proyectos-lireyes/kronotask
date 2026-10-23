@@ -161,6 +161,24 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Dynamic Theme Styling Effect
+  useEffect(() => {
+    if (theme) {
+      document.documentElement.className = `theme-${theme.id}`;
+      const primaryHex =
+        theme.primaryColor === 'emerald'
+          ? '#059669'
+          : theme.primaryColor === 'amber'
+          ? '#d97706'
+          : theme.primaryColor === 'violet'
+          ? '#7c3aed'
+          : theme.primaryColor === 'slate'
+          ? '#475569'
+          : '#2563eb';
+      document.documentElement.style.setProperty('--theme-primary-hex', primaryHex);
+    }
+  }, [theme]);
+
   // Safe interval for reminders and 4-day waiting state rollover
   useEffect(() => {
     const runCheck = () => {
@@ -639,7 +657,7 @@ export default function App() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-20 md:pb-6 select-text">
+    <div className={`min-h-screen ${theme?.accentBg || 'bg-slate-50'} text-slate-800 flex flex-col font-sans pb-20 md:pb-6 select-text transition-colors duration-200`}>
       {/* Clean Uncluttered Header */}
       <Header
         currentUser={currentUser}
@@ -656,6 +674,7 @@ export default function App() {
         notificationCount={inAppNotifications.length}
         onOpenBoardSelect={() => setIsBoardModalOpen(true)}
         currentBoardName={isMasterBoard ? 'Tablero Master' : currentBoard.name}
+        currentTheme={theme}
       />
 
       {/* Main Single-Scroll Container */}

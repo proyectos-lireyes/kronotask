@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile } from '../types';
+import { UserProfile, LightThemeConfig } from '../types';
 import {
   User,
   TrendingUp,
@@ -28,6 +28,7 @@ interface HeaderProps {
   notificationCount?: number;
   onOpenBoardSelect: () => void;
   currentBoardName: string;
+  currentTheme?: LightThemeConfig;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -45,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   notificationCount = 0,
   onOpenBoardSelect,
   currentBoardName,
+  currentTheme,
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -65,7 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, [isProfileMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3 sm:px-6 py-2.5 shadow-2xs">
+    <header className={`sticky top-0 z-30 ${currentTheme?.headerColor || 'bg-white/95 backdrop-blur-md border-b border-slate-200/80'} px-3 sm:px-6 py-2.5 shadow-2xs transition-colors duration-200`}>
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         {/* Left Side: Profile Management Button + Board Selector (ChronoTask text removed as requested) */}
         <div className="flex items-center gap-2">
