@@ -11,6 +11,8 @@ import {
   FolderKanban,
   Check,
   Smartphone,
+  CloudUpload,
+  CloudDownload,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -29,6 +31,9 @@ interface HeaderProps {
   onOpenBoardSelect: () => void;
   currentBoardName: string;
   currentTheme?: LightThemeConfig;
+  onUploadCloudBackup?: () => Promise<boolean>;
+  onRestoreCloudBackup?: () => Promise<boolean>;
+  cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,6 +52,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBoardSelect,
   currentBoardName,
   currentTheme,
+  onUploadCloudBackup,
+  onRestoreCloudBackup,
+  cloudSyncStatus,
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -166,6 +174,51 @@ export const Header: React.FC<HeaderProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* Manual Cloud Sync Controls */}
+                {currentUser && (
+                  <div className="p-2 bg-slate-50 border border-slate-200/80 rounded-xl mb-2 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold">
+                      <span>Sincronización Manual</span>
+                      {cloudSyncStatus?.lastSyncTime && (
+                        <span className="text-[10px] text-slate-400 font-normal">Última: {cloudSyncStatus.lastSyncTime}</span>
+                      )}
+                    </div>
+
+                    {cloudSyncStatus?.msg && (
+                      <div
+                        className={`p-1.5 rounded-lg text-[10px] font-bold text-center ${
+                          cloudSyncStatus.isError ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}
+                      >
+                        {cloudSyncStatus.msg}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        disabled={cloudSyncStatus?.loading}
+                        onClick={onUploadCloudBackup}
+                        className="py-1.5 px-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 shadow-2xs cursor-pointer transition-all active:scale-95"
+                        title="Subir copia local a Google Cloud"
+                      >
+                        <CloudUpload className="w-3.5 h-3.5" />
+                        <span>Subir Nube</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={cloudSyncStatus?.loading}
+                        onClick={onRestoreCloudBackup}
+                        className="py-1.5 px-2 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
+                        title="Restaurar datos guardados desde la nube"
+                      >
+                        <CloudDownload className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Restaurar</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="border-t border-slate-100 my-2" />
 

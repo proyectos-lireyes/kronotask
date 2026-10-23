@@ -32,7 +32,7 @@ import {
   loadAcceptedCollisions,
   saveAcceptedCollisions,
 } from './services/storage';
-import { initAuth, googleSignIn, logout } from './services/firebase';
+import { initAuth, googleSignIn, logout, saveUserDataToCloud, fetchUserDataFromCloud } from './services/firebase';
 import { getBiometricRecord, isVaultLocked, setVaultLocked } from './services/biometrics';
 import {
   InAppNotification,
@@ -160,6 +160,107 @@ export default function App() {
     );
     return () => unsubscribe();
   }, []);
+
+  // Manual Cloud Sync State & Handlers (Controlled by user to save quota)
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<{
+    loading: boolean;
+    lastSyncTime: string | null;
+    msg: string | null;
+    isError?: boolean;
+  }>(() => {
+    const savedTime = localStorage.getItem('kronotask_last_cloud_sync');
+    return {
+      loading: false,
+      lastSyncTime: savedTime,
+      msg: null,
+    };
+  });
+
+  const handleUploadCloudBackup = async (): Promise<boolean> => {
+    if (!currentUser?.uid) return false;
+    setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
+    try {
+      await saveUserDataToCloud(currentUser.uid, {
+        tasks,
+        boards,
+        tags,
+        customTypes: types,
+        customPriorities: priorities,
+      });
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      localStorage.setItem('kronotask_last_cloud_sync', nowStr);
+      setCloudSyncStatus({
+        loading: false,
+        lastSyncTime: nowStr,
+        msg: '✓ Respaldo subido a la nube con éxito',
+        isError: false,
+      });
+      return true;
+    } catch (e: any) {
+      setCloudSyncStatus((prev) => ({
+        loading: false,
+        lastSyncTime: prev.lastSyncTime,
+        msg: 'Error al subir respaldo a la nube',
+        isError: true,
+      }));
+      return false;
+    }
+  };
+
+  const handleRestoreCloudBackup = async (): Promise<boolean> => {
+    if (!currentUser?.uid) return false;
+    setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
+    try {
+      const cloudData = await fetchUserDataFromCloud(currentUser.uid);
+      if (cloudData) {
+        if (cloudData.tasks && Array.isArray(cloudData.tasks)) {
+          setTasks(cloudData.tasks);
+          saveTasks(cloudData.tasks);
+        }
+        if (cloudData.boards && Array.isArray(cloudData.boards) && cloudData.boards.length > 0) {
+          setBoards(cloudData.boards);
+          saveBoards(cloudData.boards);
+        }
+        if (cloudData.tags && Array.isArray(cloudData.tags)) {
+          setTags(cloudData.tags);
+          saveTags(cloudData.tags);
+        }
+        if (cloudData.customTypes && Array.isArray(cloudData.customTypes)) {
+          setTypes(cloudData.customTypes);
+          saveCustomTypes(cloudData.customTypes);
+        }
+        if (cloudData.customPriorities && Array.isArray(cloudData.customPriorities)) {
+          setPriorities(cloudData.customPriorities);
+          saveCustomPriorities(cloudData.customPriorities);
+        }
+        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        localStorage.setItem('kronotask_last_cloud_sync', nowStr);
+        setCloudSyncStatus({
+          loading: false,
+          lastSyncTime: nowStr,
+          msg: '✓ Copia de la nube restaurada exitosamente',
+          isError: false,
+        });
+        return true;
+      } else {
+        setCloudSyncStatus((prev) => ({
+          loading: false,
+          lastSyncTime: prev.lastSyncTime,
+          msg: 'No se encontró ninguna copia guardada en la nube aún',
+          isError: true,
+        }));
+        return false;
+      }
+    } catch (e: any) {
+      setCloudSyncStatus((prev) => ({
+        loading: false,
+        lastSyncTime: prev.lastSyncTime,
+        msg: 'Error al restaurar desde la nube',
+        isError: true,
+      }));
+      return false;
+    }
+  };
 
   // Dynamic Theme Styling Effect
   useEffect(() => {
@@ -675,6 +776,9 @@ export default function App() {
         onOpenBoardSelect={() => setIsBoardModalOpen(true)}
         currentBoardName={isMasterBoard ? 'Tablero Master' : currentBoard.name}
         currentTheme={theme}
+        onUploadCloudBackup={handleUploadCloudBackup}
+        onRestoreCloudBackup={handleRestoreCloudBackup}
+        cloudSyncStatus={cloudSyncStatus}
       />
 
       {/* Main Single-Scroll Container */}
@@ -1139,6 +1243,9 @@ export default function App() {
         }}
         allTasks={tasks}
         onImportBoard={handleImportBoardAction}
+        onUploadCloudBackup={handleUploadCloudBackup}
+        onRestoreCloudBackup={handleRestoreCloudBackup}
+        cloudSyncStatus={cloudSyncStatus}
       />
 
       {/* Notifications Modal Center */}

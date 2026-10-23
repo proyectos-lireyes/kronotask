@@ -10,12 +10,22 @@ import {
   User,
   signOut,
 } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { UserProfile } from '../types';
+import {
+  UserProfile,
+  Board,
+  TaskItem,
+  CustomTag,
+  CustomTypeDefinition,
+  CustomPriorityDefinition,
+} from '../types';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({
@@ -24,6 +34,19 @@ provider.setCustomParameters({
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
+
+// Initialize GoogleAuth for Native Android
+if (Capacitor.isNativePlatform()) {
+  try {
+    GoogleAuth.initialize({
+      clientId: firebaseConfig.oAuthClientId,
+      scopes: ['profile', 'email'],
+      grantOfflineAccess: true,
+    });
+  } catch (e) {
+    console.warn('GoogleAuth initialize note:', e);
+  }
+}
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -60,8 +83,50 @@ export const initAuth = (
   });
 };
 
+export interface CloudUserData {
+  uid: string;
+  updatedAt: string;
+  boards?: Board[];
+  tasks?: TaskItem[];
+  tags?: CustomTag[];
+  customTypes?: CustomTypeDefinition[];
+  customPriorities?: CustomPriorityDefinition[];
+}
+
+export async function saveUserDataToCloud(uid: string, data: Partial<CloudUserData>) {
+  if (!uid) return;
+  try {
+    const userDocRef = doc(db, 'user_data', uid);
+    await setDoc(
+      userDocRef,
+      {
+        uid,
+        updatedAt: new Date().toISOString(),
+        ...data,
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    console.warn('Error guardando copia de respaldo en la nube:', e);
+  }
+}
+
+export async function fetchUserDataFromCloud(uid: string): Promise<Partial<CloudUserData> | null> {
+  if (!uid) return null;
+  try {
+    const userDocRef = doc(db, 'user_data', uid);
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      return snap.data() as Partial<CloudUserData>;
+    }
+  } catch (e) {
+    console.warn('Error recuperando respaldo de la nube:', e);
+  }
+  return null;
+}
+
 /**
- * Loads Google Identity Services (GIS) library dynamically and triggers Google Account Chooser
+ * Loads Google Identity Services (GIS) library dynamically for Web & Preview environments
  */
 async function requestGoogleTokenViaGIS(): Promise<{ accessToken: string; profile: UserProfile }> {
   return new Promise((resolve, reject) => {
@@ -140,19 +205,36 @@ export const googleSignIn = async (): Promise<{ user: User | any; accessToken: s
     isSigningIn = true;
     const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
+    // 1. Native Android Google Sign-In via Google Play Services
+    if (isNativeAndroid) {
+      try {
+        const googleUser = await GoogleAuth.signIn();
+        const idToken = googleUser.authentication?.idToken || '';
+        const accessToken = googleUser.authentication?.accessToken || '';
+
+        cachedAccessToken = accessToken || idToken;
+
+        // Sign in to Firebase Auth using Native Google Credential
+        const credential = GoogleAuthProvider.credential(idToken, accessToken);
+        const userCred = await signInWithCredential(auth, credential);
+
+        const profile: UserProfile = {
+          uid: userCred.user.uid,
+          displayName: userCred.user.displayName || googleUser.name || googleUser.email.split('@')[0],
+          email: userCred.user.email || googleUser.email,
+          photoURL: userCred.user.photoURL || googleUser.imageUrl,
+        };
+
+        return { user: userCred.user, accessToken: cachedAccessToken, profile };
+      } catch (nativeErr: any) {
+        console.warn('Native Android Google Auth error, falling back to GIS / Popup:', nativeErr);
+      }
+    }
+
+    // 2. Standard Web / Preview Google Auth Flow
     let result: any = null;
     try {
-      if (isNativeAndroid) {
-        try {
-          result = await signInWithPopup(auth, provider);
-        } catch (popupErr: any) {
-          console.info('signInWithPopup en Android WebView, redireccionando a Google Auth:', popupErr);
-          await signInWithRedirect(auth, provider);
-          return null;
-        }
-      } else {
-        result = await signInWithPopup(auth, provider);
-      }
+      result = await signInWithPopup(auth, provider);
     } catch (authErr: any) {
       // Handle auth/unauthorized-domain or popup blocked using official Google Identity Services (GIS) Account Selector
       if (
@@ -216,6 +298,13 @@ export const setAccessToken = (token: string) => {
 };
 
 export const logout = async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await GoogleAuth.signOut();
+    } catch (e) {
+      console.warn('GoogleAuth signOut note:', e);
+    }
+  }
   await signOut(auth);
   cachedAccessToken = null;
 };

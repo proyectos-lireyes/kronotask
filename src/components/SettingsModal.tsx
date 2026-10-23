@@ -49,6 +49,8 @@ import {
   ArrowDownUp,
   FileText,
   Pencil,
+  CloudUpload,
+  CloudDownload,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -74,6 +76,9 @@ interface SettingsModalProps {
   onBiometricStatusChange: () => void;
   allTasks: TaskItem[];
   onImportBoard: (action: ImportBoardAction) => void;
+  onUploadCloudBackup?: () => Promise<boolean>;
+  onRestoreCloudBackup?: () => Promise<boolean>;
+  cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -99,6 +104,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onBiometricStatusChange,
   allTasks,
   onImportBoard,
+  onUploadCloudBackup,
+  onRestoreCloudBackup,
+  cloudSyncStatus,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme'
@@ -472,9 +480,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Tab Content */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          {/* TAB: EXPORT / IMPORT BASE64 */}
+          {/* TAB: EXPORT / IMPORT BASE64 AND CLOUD SYNC */}
           {activeTab === 'transfer' && (
             <div className="space-y-4">
+              {/* Google Cloud Manual Backup Section */}
+              <div className="bg-gradient-to-br from-indigo-50/80 to-blue-50/80 p-4 rounded-2xl border border-indigo-200/80 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-indigo-600 text-white rounded-lg shadow-xs">
+                      <CloudUpload className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-900">Sincronización Manual (Google Cloud)</h3>
+                      <p className="text-[11px] text-slate-500">
+                        Sincronización a demanda para ahorrar cuota de transferencia y cuota gratuita de Firebase.
+                      </p>
+                    </div>
+                  </div>
+                  {cloudSyncStatus?.lastSyncTime && (
+                    <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                      Última: {cloudSyncStatus.lastSyncTime}
+                    </span>
+                  )}
+                </div>
+
+                {currentUser ? (
+                  <div className="space-y-2">
+                    {cloudSyncStatus?.msg && (
+                      <div
+                        className={`p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${
+                          cloudSyncStatus.isError
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{cloudSyncStatus.msg}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={cloudSyncStatus?.loading}
+                        onClick={onUploadCloudBackup}
+                        className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-md shadow-blue-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <CloudUpload className="w-4 h-4" />
+                        <span>Subir Copia a la Nube</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={cloudSyncStatus?.loading}
+                        onClick={onRestoreCloudBackup}
+                        className="py-2.5 px-3 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50 text-slate-800 font-bold rounded-xl text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <CloudDownload className="w-4 h-4 text-indigo-600" />
+                        <span>Restaurar de la Nube</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-white/80 rounded-xl border border-indigo-100 text-xs text-slate-600 flex items-center justify-between">
+                    <span>Inicia sesión con Google para usar el respaldo manual en la nube.</span>
+                  </div>
+                )}
+              </div>
+
               {/* Segmented control: Exportar vs Importar */}
               <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-200">
                 <button
