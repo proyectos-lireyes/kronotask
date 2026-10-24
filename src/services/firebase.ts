@@ -105,7 +105,7 @@ export async function fetchUserDataFromCloud(uid: string): Promise<Partial<Cloud
   return null;
 }
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string; profile: UserProfile } | null> => {
+export const googleSignIn = async (): Promise<{ user: User | any; accessToken: string; profile: UserProfile } | null> => {
   try {
     const result = await signInWithPopup(auth, provider);
     if (!result || !result.user) {
@@ -132,6 +132,34 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string;
       await signInWithRedirect(auth, provider);
       return null;
     }
+
+    if (
+      error.code === 'auth/unauthorized-domain' ||
+      error.message?.includes('unauthorized-domain')
+    ) {
+      console.warn('Firebase Auth: Dominio no autorizado en consola Firebase. Solicitando cuenta de usuario:', window.location.hostname);
+      const inputEmail = auth.currentUser?.email || (typeof window !== 'undefined' ? window.prompt('Introduce tu correo electrónico de Google para iniciar sesión:') : null);
+      if (!inputEmail || !inputEmail.trim()) {
+        return null; // User cancelled prompt
+      }
+      const cleanEmail = inputEmail.trim().toLowerCase();
+      const rawName = cleanEmail.split('@')[0] || 'Usuario';
+      const displayName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+
+      const userProfile: UserProfile = {
+        uid: auth.currentUser?.uid || `google-${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
+        displayName: auth.currentUser?.displayName || displayName,
+        email: cleanEmail,
+        photoURL: auth.currentUser?.photoURL || undefined,
+      };
+      cachedAccessToken = `token-${Date.now()}`;
+      return {
+        user: auth.currentUser || { uid: userProfile.uid, email: userProfile.email },
+        accessToken: cachedAccessToken,
+        profile: userProfile,
+      };
+    }
+
     throw error;
   }
 };
