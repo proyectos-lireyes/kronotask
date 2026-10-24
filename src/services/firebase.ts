@@ -3,6 +3,7 @@ import {
   getAuth,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -10,6 +11,8 @@ import {
   signOut,
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
   UserProfile,
@@ -30,6 +33,19 @@ provider.setCustomParameters({
 });
 
 let cachedAccessToken: string | null = null;
+
+// Initialize GoogleAuth plugin for Native Android
+if (Capacitor.isNativePlatform()) {
+  try {
+    GoogleAuth.initialize({
+      clientId: firebaseConfig.oAuthClientId,
+      scopes: ['profile', 'email'],
+      grantOfflineAccess: true,
+    });
+  } catch (e) {
+    console.warn('GoogleAuth init notice:', e);
+  }
+}
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -105,7 +121,37 @@ export async function fetchUserDataFromCloud(uid: string): Promise<Partial<Cloud
   return null;
 }
 
-export const googleSignIn = async (): Promise<{ user: User | any; accessToken: string; profile: UserProfile } | null> => {
+export const googleSignIn = async (): Promise<{ user: User; accessToken: string; profile: UserProfile } | null> => {
+  const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+
+  // 1. Native Android App: Google Play Services Native Sign-In
+  if (isNativeAndroid) {
+    try {
+      const googleUser = await GoogleAuth.signIn();
+      const idToken = googleUser.authentication?.idToken || '';
+      const accessToken = googleUser.authentication?.accessToken || '';
+
+      const credential = GoogleAuthProvider.credential(idToken, accessToken);
+      const userCred = await signInWithCredential(auth, credential);
+
+      cachedAccessToken = accessToken || idToken;
+      const profile: UserProfile = {
+        uid: userCred.user.uid,
+        displayName: userCred.user.displayName || googleUser.name || googleUser.email.split('@')[0],
+        email: userCred.user.email || googleUser.email,
+        photoURL: userCred.user.photoURL || googleUser.imageUrl,
+      };
+
+      return { user: userCred.user, accessToken: cachedAccessToken, profile };
+    } catch (nativeErr: any) {
+      console.warn('Native Android Google Auth notice:', nativeErr);
+      if (nativeErr?.message?.includes('cancel') || nativeErr?.code === '12501') {
+        return null; // User cancelled
+      }
+    }
+  }
+
+  // 2. Standard Web & Preview Flow: Pure Firebase Google Provider
   try {
     const result = await signInWithPopup(auth, provider);
     if (!result || !result.user) {
@@ -132,34 +178,6 @@ export const googleSignIn = async (): Promise<{ user: User | any; accessToken: s
       await signInWithRedirect(auth, provider);
       return null;
     }
-
-    if (
-      error.code === 'auth/unauthorized-domain' ||
-      error.message?.includes('unauthorized-domain')
-    ) {
-      console.warn('Firebase Auth: Dominio no autorizado en consola Firebase. Solicitando cuenta de usuario:', window.location.hostname);
-      const inputEmail = auth.currentUser?.email || (typeof window !== 'undefined' ? window.prompt('Introduce tu correo electrónico de Google para iniciar sesión:') : null);
-      if (!inputEmail || !inputEmail.trim()) {
-        return null; // User cancelled prompt
-      }
-      const cleanEmail = inputEmail.trim().toLowerCase();
-      const rawName = cleanEmail.split('@')[0] || 'Usuario';
-      const displayName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-
-      const userProfile: UserProfile = {
-        uid: auth.currentUser?.uid || `google-${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
-        displayName: auth.currentUser?.displayName || displayName,
-        email: cleanEmail,
-        photoURL: auth.currentUser?.photoURL || undefined,
-      };
-      cachedAccessToken = `token-${Date.now()}`;
-      return {
-        user: auth.currentUser || { uid: userProfile.uid, email: userProfile.email },
-        accessToken: cachedAccessToken,
-        profile: userProfile,
-      };
-    }
-
     throw error;
   }
 };
@@ -173,6 +191,13 @@ export const setAccessToken = (token: string) => {
 };
 
 export const logout = async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await GoogleAuth.signOut();
+    } catch (e) {
+      console.warn('GoogleAuth signOut note:', e);
+    }
+  }
   await signOut(auth);
   cachedAccessToken = null;
 };
