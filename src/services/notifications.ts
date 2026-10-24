@@ -306,6 +306,24 @@ export function checkTaskRemindersAndSchedules(
       });
     }
 
+    // Task Start Passed but Still in "Por Hacer" (Pending Start Alert)
+    const unstartedPendingKey = `unstarted-${task.id}-${todayDateStr}`;
+    if (now > start && task.status === 'todo' && !notifiedEventsCache.has(unstartedPendingKey)) {
+      notifiedEventsCache.add(unstartedPendingKey);
+      soundService.playChime('reminder');
+      sendPushNotification(`⚠️ Inicio Pendiente: ${task.title}`, {
+        body: `Su hora de inicio fue ${new Date(task.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} y sigue en 'Por Hacer'.`,
+      });
+      onInAppNotification({
+        id: `notif-unstarted-${Date.now()}-${Math.random()}`,
+        title: `⚠️ Tarea por Iniciar`,
+        body: `"${task.title}" debió iniciar a las ${new Date(task.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} y sigue pendiente en Por Hacer.`,
+        type: 'warning',
+        timestamp: new Date().toISOString(),
+        taskId: task.id,
+      });
+    }
+
     // B) END TIME / DEADLINE REMINDERS & NOTIFICATIONS
     if (task.reminders && task.reminders.length > 0) {
       task.reminders.forEach((rem) => {
