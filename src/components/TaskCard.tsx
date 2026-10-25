@@ -1,6 +1,7 @@
 import React from 'react';
 import { TaskItem, CustomTag, Board } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
+import { detectTaskStatusMismatch } from '../utils/prioritySort';
 import {
   CheckCircle2,
   Flag,
@@ -9,6 +10,7 @@ import {
   ArrowLeft,
   Paperclip,
   MessageSquare,
+  Zap,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from '../services/notifications';
@@ -35,6 +37,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   const isDone = task.status === 'done';
   const isWaiting = task.status === 'waiting';
   const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
+  const mismatch = detectTaskStatusMismatch(task, Date.now());
   const isBlack = !isDone && timeCalc.level === 'black';
 
   // Calculate 4-day waiting remaining time if applicable
@@ -156,6 +159,26 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           <CheckCircle2 className="w-4 h-4" />
         </button>
       </div>
+
+      {/* System Status Mismatch Detector Badge */}
+      {mismatch.isMismatched && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onStatusChange(task.id, mismatch.suggestedStatus);
+          }}
+          className={`mt-1.5 p-1 px-2 rounded-lg border flex items-center justify-between gap-1 text-[10px] font-bold cursor-pointer transition-transform active:scale-[0.98] ${mismatch.badgeColor}`}
+          title={`${mismatch.reason} Click para mover a ${mismatch.suggestedStatusLabel}.`}
+        >
+          <span className="flex items-center gap-1 truncate">
+            <Zap className="w-3 h-3 shrink-0 animate-pulse text-amber-500" />
+            <span className="truncate">{mismatch.badgeLabel}</span>
+          </span>
+          <span className="shrink-0 text-[9px] font-extrabold bg-white/40 px-1.5 py-0.5 rounded shadow-2xs">
+            Cambiar
+          </span>
+        </div>
+      )}
 
       {/* Bottom Row: Badges (Semáforo, Prioridad, Espera, Meta) */}
       <div

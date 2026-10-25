@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { TaskItem, CustomTag, TaskStatus, Board, CustomPriorityDefinition } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { formatRecurrenceLabel } from '../utils/recurrence';
-import { sortTasksByPriorityAndUrgency } from '../utils/prioritySort';
+import { sortTasksByPriorityAndUrgency, detectTaskStatusMismatch } from '../utils/prioritySort';
 import { OptionPickerModal, PickerOption } from './OptionPickerModal';
 import {
   CheckCircle2,
@@ -19,6 +19,7 @@ import {
   Layers,
   Flame,
   AlertTriangle,
+  Zap,
 } from 'lucide-react';
 
 interface TaskListViewProps {
@@ -303,6 +304,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                 sortedTasks.map((task) => {
                   const isDone = task.status === 'done';
                   const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
+                  const mismatch = detectTaskStatusMismatch(task, Date.now());
                   const taskBoard = allBoards?.find((b) => b.id === task.boardId);
 
                   return (
@@ -381,10 +383,27 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                         </td>
                       )}
 
+                      {/* Status Column with Detector */}
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-md font-medium capitalize bg-slate-100 text-slate-700">
-                          {task.status.replace('_', ' ')}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="px-2 py-0.5 rounded-md font-medium capitalize bg-slate-100 text-slate-700">
+                            {task.status.replace('_', ' ')}
+                          </span>
+                          {mismatch.isMismatched && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onStatusChange(task.id, mismatch.suggestedStatus);
+                              }}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold transition-all cursor-pointer shadow-2xs active:scale-[0.98] ${mismatch.badgeColor}`}
+                              title={`${mismatch.reason} Click para mover a ${mismatch.suggestedStatusLabel}.`}
+                            >
+                              <Zap className="w-3 h-3 text-amber-500 shrink-0 animate-pulse" />
+                              <span>Sugerido: En Progreso</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-3 px-4 whitespace-nowrap">

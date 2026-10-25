@@ -41,19 +41,33 @@ export function calculateTimeLevel(
 ): TimeCalculation {
   const start = new Date(startDateStr).getTime();
   const end = new Date(endDateStr).getTime();
-  const totalDurationMs = Math.max(1, end - start);
+  const totalDurationMs = Math.max(60000, end - start); // At least 1 minute
 
   const remainingMs = end - now;
   const isOverdue = remainingMs < 0;
   const notStarted = now < start;
 
   let percentElapsed = 0;
-  if (isOverdue) {
-    percentElapsed = 100 + Math.min(100, Math.floor((Math.abs(remainingMs) / totalDurationMs) * 100));
-  } else if (notStarted) {
+  if (isCompleted) {
     percentElapsed = 0;
+  } else if (isOverdue) {
+    const overdueRatio = Math.abs(remainingMs) / totalDurationMs;
+    percentElapsed = 100 + Math.min(100, Math.floor(overdueRatio * 100));
+  } else if (notStarted) {
+    // Current time is before start date.
+    // Evaluate progress towards start date relative to total task duration.
+    const startRemMs = start - now;
+    if (startRemMs <= totalDurationMs) {
+      // Within 1 duration window of starting: ratio scales smoothly up to 24.9%
+      const startProximityRatio = Math.max(0, 1 - startRemMs / totalDurationMs);
+      percentElapsed = Math.min(24.9, Math.floor(startProximityRatio * 24.9));
+    } else {
+      percentElapsed = 0;
+    }
   } else {
-    percentElapsed = Math.min(99.9, Math.max(0, ((now - start) / totalDurationMs) * 100));
+    // Current time is between startDate and endDate
+    const rawRatio = (now - start) / totalDurationMs;
+    percentElapsed = Math.min(99.9, Math.max(0, rawRatio * 100));
   }
 
   const percentRemaining = Math.max(0, 100 - percentElapsed);

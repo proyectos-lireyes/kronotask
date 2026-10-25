@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { formatRecurrenceLabel } from '../utils/recurrence';
+import { detectTaskStatusMismatch } from '../utils/prioritySort';
 import { ConfirmationModal } from './ConfirmationModal';
 import { checkTaskCollisionWithExisting, isEventType } from '../utils/collisionUtils';
 import { OptionPickerModal } from './OptionPickerModal';
@@ -37,6 +38,7 @@ import {
   Check,
   ChevronDown,
   Flag,
+  Zap,
 } from 'lucide-react';
 
 interface TaskModalProps {
@@ -548,11 +550,56 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   />
                 </div>
 
-                {/* Status Segmented Bar */}
+                {/* Status Segmented Bar & Detector Recommendation */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Estado de la Tarea
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Estado de la Tarea
+                    </label>
+                  </div>
+
+                  {/* System Detector Recommendation Banner */}
+                  {(() => {
+                    const tempTaskItem: TaskItem = {
+                      id: task ? task.id : 'temp',
+                      boardId,
+                      title,
+                      description,
+                      status,
+                      startDate: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
+                      endDate: endDate ? new Date(endDate).toISOString() : new Date().toISOString(),
+                      priority,
+                      type,
+                      tags: selectedTags,
+                      attachments: [],
+                      comments: [],
+                      reminders: [],
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString(),
+                    };
+                    const m = detectTaskStatusMismatch(tempTaskItem, Date.now());
+                    if (!m.isMismatched) return null;
+
+                    return (
+                      <div className={`p-2.5 mb-2 rounded-xl border flex items-center justify-between gap-2 text-xs shadow-2xs ${m.badgeColor}`}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Zap className="w-4 h-4 text-amber-500 shrink-0 animate-bounce" />
+                          <div className="truncate">
+                            <span className="font-extrabold">{m.badgeLabel}</span>
+                            <p className="text-[10px] font-medium opacity-90 truncate">{m.reason}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setStatus(m.suggestedStatus)}
+                          className="shrink-0 px-2.5 py-1 bg-white/90 hover:bg-white text-slate-900 rounded-lg text-[11px] font-extrabold cursor-pointer transition-colors shadow-2xs border border-slate-200"
+                        >
+                          Aplicar "En Progreso"
+                        </button>
+                      </div>
+                    );
+                  })()}
+
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                     {[
                       { id: 'todo', label: 'Por Hacer', activeBg: 'bg-slate-800 text-white' },

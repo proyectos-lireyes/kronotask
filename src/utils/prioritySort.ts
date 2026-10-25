@@ -1,5 +1,107 @@
-import { TaskItem, CustomPriorityDefinition } from '../types';
+import { TaskItem, CustomPriorityDefinition, TaskStatus } from '../types';
 import { calculateTimeLevel } from './timeColor';
+
+export interface TaskStatusMismatch {
+  isMismatched: boolean;
+  suggestedStatus: TaskStatus;
+  suggestedStatusLabel: string;
+  badgeLabel: string;
+  badgeColor: string;
+  reason: string;
+  urgencyLevel: 'critical' | 'high' | 'medium';
+}
+
+/**
+ * Calculates whether a task's current status is inconsistent with its start date,
+ * end date, and current time. For example, if start date has passed or end date is near,
+ * the task should NOT remain in "Por Hacer" (todo).
+ */
+export function detectTaskStatusMismatch(
+  task: TaskItem,
+  now: number = Date.now()
+): TaskStatusMismatch {
+  if (task.status === 'done') {
+    return {
+      isMismatched: false,
+      suggestedStatus: 'done',
+      suggestedStatusLabel: 'Completada',
+      badgeLabel: '',
+      badgeColor: '',
+      reason: '',
+      urgencyLevel: 'medium',
+    };
+  }
+
+  const startMs = new Date(task.startDate).getTime();
+  const endMs = new Date(task.endDate).getTime();
+  const totalDuration = Math.max(60000, endMs - startMs);
+  const remainingMs = endMs - now;
+
+  // 1. Deadline Exceeded (Overdue)
+  if (now >= endMs) {
+    return {
+      isMismatched: true,
+      suggestedStatus: 'in_progress',
+      suggestedStatusLabel: 'En Progreso (Atención Inmediata)',
+      badgeLabel: '🚨 Vencida: Mover a En Progreso',
+      badgeColor: 'bg-stone-900 text-amber-300 border-stone-800 hover:bg-stone-800 dark:bg-stone-900 dark:text-amber-200',
+      reason: 'La fecha y hora de entrega ha transcurrido. Requiere acción inmediata.',
+      urgencyLevel: 'critical',
+    };
+  }
+
+  // 2. Scheduled Execution Window Active (Start Date passed) but task still in 'todo'
+  if (now >= startMs && task.status === 'todo') {
+    return {
+      isMismatched: true,
+      suggestedStatus: 'in_progress',
+      suggestedStatusLabel: 'En Progreso',
+      badgeLabel: '⚡ Plazo Activo (Debería estar En Progreso)',
+      badgeColor: 'bg-amber-500/15 text-amber-900 border-amber-300/80 hover:bg-amber-500/25 dark:bg-amber-500/20 dark:text-amber-200',
+      reason: 'La fecha de inicio de esta tarea ya transcurrió; el plazo de ejecución está activo.',
+      urgencyLevel: 'high',
+    };
+  }
+
+  // 3. Imminent Delivery (less than half duration remains or under 4 hours) but task still in 'todo'
+  if (task.status === 'todo') {
+    const isImminent = remainingMs <= Math.max(totalDuration * 0.5, 4 * 3600 * 1000);
+    if (isImminent) {
+      return {
+        isMismatched: true,
+        suggestedStatus: 'in_progress',
+        suggestedStatusLabel: 'En Progreso',
+        badgeLabel: '⏰ Entrega Cercana (Iniciar Ya)',
+        badgeColor: 'bg-orange-500/15 text-orange-900 border-orange-300/80 hover:bg-orange-500/25 dark:bg-orange-500/20 dark:text-orange-200',
+        reason: 'Falta poco tiempo para la fecha de entrega. El sistema recomienda iniciarla.',
+        urgencyLevel: 'high',
+      };
+    }
+  }
+
+  // 4. In 'waiting' status but overdue
+  if (task.status === 'waiting' && now >= endMs) {
+    return {
+      isMismatched: true,
+      suggestedStatus: 'in_progress',
+      suggestedStatusLabel: 'En Progreso',
+      badgeLabel: '⚡ Vencida en Espera (Reanudar)',
+      badgeColor: 'bg-purple-500/15 text-purple-900 border-purple-300/80 hover:bg-purple-500/25 dark:bg-purple-500/20 dark:text-purple-200',
+      reason: 'La tarea estaba en espera pero el plazo de entrega ya caducó.',
+      urgencyLevel: 'critical',
+    };
+  }
+
+  return {
+    isMismatched: false,
+    suggestedStatus: task.status,
+    suggestedStatusLabel: task.status,
+    badgeLabel: '',
+    badgeColor: '',
+    reason: '',
+    urgencyLevel: 'medium',
+  };
+}
 
 /**
  * Calculates the exact Relative Priority Score for a task.
@@ -12,6 +114,7 @@ export interface TaskUrgencyDetails {
   priorityLevelNum: number;
   priorityCategory: 'high' | 'medium' | 'low';
   score: number;
+  mismatch: TaskStatusMismatch;
 }
 
 /**
@@ -31,51 +134,49 @@ export function calculateTaskUrgencyInfo(
 
   const startMs = new Date(task.startDate).getTime();
   const endMs = new Date(task.endDate).getTime();
+  const totalDurationMs = Math.max(60000, endMs - startMs);
+  const remainingMs = endMs - now;
   const isStarted = !isDone && now >= startMs;
 
-  const hoursUntilStart = (startMs - now) / (1000 * 3600);
-  const hoursUntilEnd = (endMs - now) / (1000 * 3600);
+  const mismatch = detectTaskStatusMismatch(task, now);
 
-  // 1. Start Date / Imminence Bonus
+  // 1. Start Date / Execution Window Bonus
   let startBonus = 0;
   if (!isDone) {
     if (isStarted) {
-      startBonus = 25;
-    } else if (hoursUntilStart <= 6) {
       startBonus = 30;
-    } else if (hoursUntilStart <= 12) {
-      startBonus = 25;
-    } else if (hoursUntilStart <= 24) {
+    } else if (startMs - now <= totalDurationMs * 0.25) {
       startBonus = 20;
-    } else if (hoursUntilStart <= 48) {
+    } else if (startMs - now <= totalDurationMs * 0.5) {
       startBonus = 12;
-    } else if (hoursUntilStart <= 72) {
-      startBonus = 5;
     }
   }
 
-  // 2. Deadline Proximity Bonus
+  // 2. Deadline Proximity Bonus (ratio of time remaining)
   let deadlineBonus = 0;
   if (!isDone) {
     if (isOverdue) {
       deadlineBonus = 50;
-    } else if (hoursUntilEnd <= 12) {
-      deadlineBonus = 35;
-    } else if (hoursUntilEnd <= 24) {
-      deadlineBonus = 25;
-    } else if (hoursUntilEnd <= 48) {
-      deadlineBonus = 15;
-    } else if (hoursUntilEnd <= 72) {
-      deadlineBonus = 8;
+    } else {
+      const remainingRatio = remainingMs / totalDurationMs;
+      if (remainingRatio <= 0.25) {
+        deadlineBonus = 35;
+      } else if (remainingRatio <= 0.5) {
+        deadlineBonus = 25;
+      } else if (remainingRatio <= 0.75) {
+        deadlineBonus = 12;
+      }
     }
   }
 
-  // 3. Status Bonus
+  // 3. Status Mismatch Bonus (if start date passed or delivery imminent but stuck in 'todo')
   let statusBonus = 0;
   if (task.status === 'in_progress') {
     statusBonus = 20;
   } else if (task.status === 'waiting') {
     statusBonus = 10;
+  } else if (mismatch.isMismatched) {
+    statusBonus = 25;
   }
 
   const effectiveUrgency = Math.min(100, Math.max(0, percentElapsed)) + startBonus + deadlineBonus + statusBonus;
@@ -83,15 +184,19 @@ export function calculateTaskUrgencyInfo(
   // Categorize Urgency ('high' | 'medium' | 'low')
   let urgencyCategory: 'high' | 'medium' | 'low' = 'low';
 
-  if (isOverdue || percentElapsed >= 75 || hoursUntilEnd <= 24 || effectiveUrgency >= 75) {
+  if (
+    isOverdue ||
+    percentElapsed >= 75 ||
+    mismatch.isMismatched ||
+    isStarted ||
+    remainingMs <= Math.max(totalDurationMs * 0.5, 4 * 3600 * 1000) ||
+    effectiveUrgency >= 65
+  ) {
     urgencyCategory = 'high';
   } else if (
-    percentElapsed >= 40 ||
+    percentElapsed >= 35 ||
     task.status === 'in_progress' ||
-    isStarted ||
-    (hoursUntilStart > 0 && hoursUntilStart <= 24) ||
-    (hoursUntilEnd > 0 && hoursUntilEnd <= 48) ||
-    effectiveUrgency >= 35
+    effectiveUrgency >= 30
   ) {
     urgencyCategory = 'medium';
   } else {
@@ -118,9 +223,13 @@ export function calculateTaskUrgencyInfo(
   }
 
   let priorityCategory: 'high' | 'medium' | 'low' = 'medium';
-  if (pLevelNum >= 3) priorityCategory = 'high';
-  else if (pLevelNum === 2) priorityCategory = 'medium';
-  else priorityCategory = 'low';
+  if (pLevelNum >= 3 || (remainingMs > 0 && remainingMs <= totalDurationMs * 0.5) || (isOverdue && !isDone)) {
+    priorityCategory = 'high';
+  } else if (pLevelNum === 2) {
+    priorityCategory = 'medium';
+  } else {
+    priorityCategory = 'low';
+  }
 
   const score = pLevelNum * 20 + effectiveUrgency;
 
@@ -131,6 +240,7 @@ export function calculateTaskUrgencyInfo(
     priorityLevelNum: pLevelNum,
     priorityCategory,
     score,
+    mismatch,
   };
 }
 
