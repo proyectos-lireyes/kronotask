@@ -225,7 +225,7 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
               className="w-full py-3.5 px-4 border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/60 rounded-2xl text-xs font-bold text-blue-600 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-98 mt-2"
             >
               <Plus className="w-4 h-4" />
-              <span>Crear Nuevo Tablero (Abrir Modal)</span>
+              <span>Crear Nuevo Tablero</span>
             </button>
           </div>
         </div>

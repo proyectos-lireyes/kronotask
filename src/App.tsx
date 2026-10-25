@@ -32,7 +32,7 @@ import {
   loadAcceptedCollisions,
   saveAcceptedCollisions,
 } from './services/storage';
-import { initAuth, googleSignIn, logout, saveUserDataToCloud, fetchUserDataFromCloud } from './services/firebase';
+import { initAuth, googleSignIn, logout, saveUserDataToCloud, fetchUserDataFromCloud, getStoredUserProfile } from './services/firebase';
 import { getBiometricRecord, isVaultLocked, setVaultLocked } from './services/biometrics';
 import {
   InAppNotification,
@@ -101,7 +101,7 @@ export default function App() {
   const [acceptedCollisions, setAcceptedCollisions] = useState<string[]>(() => loadAcceptedCollisions());
 
   // User Auth & Biometrics
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUserProfile());
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [biometricRecord, setBiometricRecord] = useState<BiometricRecord>(() => getBiometricRecord());
   const [isLocked, setIsLocked] = useState<boolean>(() => isVaultLocked());
@@ -186,15 +186,24 @@ export default function App() {
   // Firebase Auth listener
   useEffect(() => {
     const unsubscribe = initAuth(
-      (user) => {
-        setCurrentUser({
-          uid: user.uid,
-          displayName: user.displayName || user.email?.split('@')[0] || 'Usuario',
-          email: user.email || '',
-          photoURL: user.photoURL || undefined,
-        });
+      (user, token, profile) => {
+        if (profile) {
+          setCurrentUser(profile);
+        } else if (user) {
+          setCurrentUser({
+            uid: user.uid,
+            displayName: user.displayName || user.email?.split('@')[0] || 'Usuario',
+            email: user.email || '',
+            photoURL: user.photoURL || undefined,
+          });
+        }
       },
-      () => setCurrentUser(null)
+      () => {
+        const stored = getStoredUserProfile();
+        if (!stored) {
+          setCurrentUser(null);
+        }
+      }
     );
     return () => unsubscribe();
   }, []);

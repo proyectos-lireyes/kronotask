@@ -33,33 +33,68 @@ provider.setCustomParameters({
 });
 
 let cachedAccessToken: string | null = null;
+const STORAGE_USER_KEY = 'kronotask_user_profile_v5';
+const STORAGE_TOKEN_KEY = 'kronotask_user_token_v5';
 
-// Initialize GoogleAuth plugin for Native Android
-if (Capacitor.isNativePlatform()) {
+export function getStoredUserProfile(): UserProfile | null {
   try {
-    GoogleAuth.initialize({
-      clientId: firebaseConfig.oAuthClientId,
-      scopes: ['profile', 'email'],
-      grantOfflineAccess: true,
-    });
+    const raw = localStorage.getItem(STORAGE_USER_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.email) return parsed;
+    }
   } catch (e) {
-    console.warn('GoogleAuth init notice:', e);
+    console.warn('Error loading stored user profile:', e);
+  }
+  return null;
+}
+
+export function saveStoredUserProfile(profile: UserProfile | null) {
+  try {
+    if (profile) {
+      localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(profile));
+    } else {
+      localStorage.removeItem(STORAGE_USER_KEY);
+    }
+  } catch (e) {
+    console.warn('Error saving user profile:', e);
   }
 }
 
 export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthSuccess?: (user: User | any, token: string, profile?: UserProfile) => void,
   onAuthFailure?: () => void
 ) => {
+  const storedProfile = getStoredUserProfile();
+  const storedToken = localStorage.getItem(STORAGE_TOKEN_KEY) || '';
+
+  if (storedProfile && onAuthSuccess) {
+    onAuthSuccess(
+      auth.currentUser || { uid: storedProfile.uid, email: storedProfile.email, displayName: storedProfile.displayName },
+      storedToken,
+      storedProfile
+    );
+  }
+
   // Standard Firebase Redirect Result Handler
   getRedirectResult(auth)
     .then((result) => {
       if (result && result.user) {
         const credential = GoogleAuthProvider.credentialFromResult(result);
-        const accessToken = credential?.accessToken || '';
+        const accessToken = credential?.accessToken || storedToken || '';
         cachedAccessToken = accessToken;
+        if (accessToken) localStorage.setItem(STORAGE_TOKEN_KEY, accessToken);
+        
+        const profile: UserProfile = {
+          uid: result.user.uid,
+          displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Usuario',
+          email: result.user.email || '',
+          photoURL: result.user.photoURL || undefined,
+        };
+        saveStoredUserProfile(profile);
+
         if (onAuthSuccess) {
-          onAuthSuccess(result.user, accessToken);
+          onAuthSuccess(result.user, accessToken, profile);
         }
       }
     })
@@ -69,12 +104,30 @@ export const initAuth = (
 
   return onAuthStateChanged(auth, (user: User | null) => {
     if (user) {
+      const profile: UserProfile = {
+        uid: user.uid,
+        displayName: user.displayName || user.email?.split('@')[0] || 'Usuario',
+        email: user.email || '',
+        photoURL: user.photoURL || undefined,
+      };
+      saveStoredUserProfile(profile);
       if (onAuthSuccess) {
-        onAuthSuccess(user, cachedAccessToken || '');
+        onAuthSuccess(user, cachedAccessToken || storedToken || '', profile);
       }
     } else {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
+      const profile = getStoredUserProfile();
+      if (profile) {
+        if (onAuthSuccess) {
+          onAuthSuccess(
+            { uid: profile.uid, email: profile.email, displayName: profile.displayName },
+            cachedAccessToken || storedToken || '',
+            profile
+          );
+        }
+      } else {
+        cachedAccessToken = null;
+        if (onAuthFailure) onAuthFailure();
+      }
     }
   });
 };
@@ -276,5 +329,7 @@ export const logout = async () => {
     }
   }
   await signOut(auth);
+  saveStoredUserProfile(null);
+  localStorage.removeItem(STORAGE_TOKEN_KEY);
   cachedAccessToken = null;
 };

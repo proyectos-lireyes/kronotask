@@ -2,7 +2,7 @@ import React from 'react';
 import { TaskItem, CustomTag, Board, TaskStatus, CustomPriorityDefinition } from '../types';
 import { TaskCard } from './TaskCard';
 import { calculateTimeLevel } from '../utils/timeColor';
-import { getTaskPriorityScore, sortTasksByPriorityAndUrgency } from '../utils/prioritySort';
+import { getTaskPriorityScore, sortTasksByPriorityAndUrgency, calculateTaskUrgencyInfo } from '../utils/prioritySort';
 import {
   Flame,
   Zap,
@@ -215,66 +215,7 @@ export function getRelativePriorityInfo(
   task: TaskItem,
   allPriorities?: CustomPriorityDefinition[]
 ): RelativePriorityInfo {
-  const isDone = task.status === 'done';
-  const now = Date.now();
-  const timeCalc = calculateTimeLevel(task.startDate, task.endDate, now, isDone);
-
-  let percentElapsed = timeCalc.percentElapsed;
-  if (timeCalc.isOverdue && !isDone) {
-    percentElapsed = 100;
-  }
-
-  // Start date imminence weight
-  let startBonus = 0;
-  if (!isDone) {
-    const startMs = new Date(task.startDate).getTime();
-    if (now >= startMs) {
-      startBonus = 15;
-    } else {
-      const diffHours = (startMs - now) / (1000 * 3600);
-      if (diffHours <= 12) startBonus = 10;
-      else if (diffHours <= 24) startBonus = 5;
-    }
-  }
-
-  let pLevelNum = 2; // Default Media
-  const matched = allPriorities?.find(
-    (p) =>
-      p.id.toLowerCase() === task.priority.toLowerCase() ||
-      p.name.toLowerCase() === task.priority.toLowerCase()
-  );
-
-  if (matched) {
-    pLevelNum = matched.level;
-  } else {
-    const norm = task.priority.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (norm.includes('critica') || norm.includes('critical') || norm === '5') pLevelNum = 5;
-    else if (norm.includes('urgente') || norm.includes('urgent') || norm === '4') pLevelNum = 4;
-    else if (norm.includes('alta') || norm.includes('high') || norm === '3') pLevelNum = 3;
-    else if (norm.includes('baja') || norm.includes('low') || norm === '1') pLevelNum = 1;
-    else pLevelNum = 2;
-  }
-
-  let priorityCategory: 'high' | 'medium' | 'low' = 'medium';
-  if (pLevelNum >= 3) priorityCategory = 'high';
-  else if (pLevelNum === 2) priorityCategory = 'medium';
-  else priorityCategory = 'low';
-
-  const effectiveUrgency = percentElapsed + startBonus;
-  let urgencyCategory: 'high' | 'medium' | 'low' = 'low';
-  if (effectiveUrgency >= 75 || timeCalc.isOverdue) urgencyCategory = 'high';
-  else if (effectiveUrgency >= 50) urgencyCategory = 'medium';
-  else urgencyCategory = 'low';
-
-  const score = pLevelNum * 20 + effectiveUrgency;
-
-  return {
-    percentElapsed,
-    priorityLevelNum: pLevelNum,
-    priorityCategory,
-    urgencyCategory,
-    score,
-  };
+  return calculateTaskUrgencyInfo(task, allPriorities);
 }
 
 export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
