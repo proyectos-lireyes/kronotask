@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TaskItem, TaskStatus, CustomTag, TimeColorLevel, Board } from '../types';
+import { TaskItem, TaskStatus, CustomTag, TimeColorLevel, Board, CustomPriorityDefinition } from '../types';
 import { TaskCard } from './TaskCard';
 import {
   Plus,
@@ -9,11 +9,13 @@ import {
   Eye,
 } from 'lucide-react';
 import { calculateTimeLevel } from '../utils/timeColor';
+import { sortTasksByPriorityAndUrgency } from '../utils/prioritySort';
 
 interface KanbanBoardProps {
   tasks: TaskItem[];
   allTags: CustomTag[];
   allBoards?: Board[];
+  allPriorities?: CustomPriorityDefinition[];
   isMasterView?: boolean;
   onSelectTask: (task: TaskItem) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
@@ -78,6 +80,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks,
   allTags,
   allBoards,
+  allPriorities,
   isMasterView,
   onSelectTask,
   onStatusChange,
@@ -116,38 +119,37 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   const getFilteredTasksForColumn = (status: TaskStatus) => {
-    return tasks
-      .filter((t) => {
-        if (t.status !== status) return false;
+    const colTasks = tasks.filter((t) => {
+      if (t.status !== status) return false;
 
-        // Filter by color level if selected
-        if (filterColor !== 'all') {
-          const timeCalc = calculateTimeLevel(t.startDate, t.endDate, Date.now(), t.status === 'done');
-          if (timeCalc.level !== filterColor) return false;
-        }
+      // Filter by color level if selected
+      if (filterColor !== 'all') {
+        const timeCalc = calculateTimeLevel(t.startDate, t.endDate, Date.now(), t.status === 'done');
+        if (timeCalc.level !== filterColor) return false;
+      }
 
-        // Search query filter
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchTitle = t.title.toLowerCase().includes(q);
-          const matchDesc = t.description?.toLowerCase().includes(q);
-          const matchTags = t.tags.some((tag) => tag.toLowerCase().includes(q));
-          if (!matchTitle && !matchDesc && !matchTags) return false;
-        }
+      // Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = t.title.toLowerCase().includes(q);
+        const matchDesc = t.description?.toLowerCase().includes(q);
+        const matchTags = t.tags.some((tag) => tag.toLowerCase().includes(q));
+        if (!matchTitle && !matchDesc && !matchTags) return false;
+      }
 
-        // Priority filter
-        if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
+      // Priority filter
+      if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
 
-        // Type filter
-        if (filterType !== 'all' && t.type !== filterType) return false;
+      // Type filter
+      if (filterType !== 'all' && t.type !== filterType) return false;
 
-        // Tag filter
-        if (filterTag !== 'all' && !t.tags.includes(filterTag)) return false;
+      // Tag filter
+      if (filterTag !== 'all' && !t.tags.includes(filterTag)) return false;
 
-        return true;
-      })
-      // Ordenar por fecha de entrega más cercana para establecer prioridades
-      .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+      return true;
+    });
+
+    return sortTasksByPriorityAndUrgency(colTasks, allPriorities);
   };
 
   return (

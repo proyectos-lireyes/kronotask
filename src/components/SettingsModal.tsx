@@ -25,6 +25,7 @@ import {
   parseBoardFromBase64,
   BoardExportPackage,
 } from '../utils/boardTransfer';
+import { OptionPickerModal, PickerOption } from './OptionPickerModal';
 import {
   X,
   Settings,
@@ -48,6 +49,7 @@ import {
   Upload,
   ArrowDownUp,
   FileText,
+  ChevronDown,
   Pencil,
   CloudUpload,
   CloudDownload,
@@ -139,6 +141,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Transfer (Export / Import) states
   const [transferMode, setTransferMode] = useState<'export' | 'import'>('export');
   const [selectedExportBoardId, setSelectedExportBoardId] = useState<string>(boards[0]?.id || '');
+  const [isExportBoardPickerOpen, setIsExportBoardPickerOpen] = useState(false);
   const [generatedBase64, setGeneratedBase64] = useState<string>('');
   const [copiedBase64, setCopiedBase64] = useState(false);
 
@@ -591,28 +594,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <label className="text-xs font-bold text-slate-800 block">
                       Selecciona el tablero que deseas compartir o respaldar:
                     </label>
-                    <select
-                      value={selectedExportBoardId}
-                      onChange={(e) => {
-                        setSelectedExportBoardId(e.target.value);
-                        setGeneratedBase64('');
-                      }}
-                      className="w-full text-xs font-bold p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    <button
+                      type="button"
+                      onClick={() => setIsExportBoardPickerOpen(true)}
+                      className="w-full text-xs font-bold p-3 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-all flex items-center justify-between cursor-pointer shadow-2xs text-slate-800"
                     >
-                      <option value="all">
-                        ⭐ TODOS los Tableros ({boards.length} tableros, {allTasks.length} tareas en total)
-                      </option>
-                      {boards.map((b) => {
-                        const count = allTasks.filter(
-                          (t) => t.boardId === b.id || (!t.boardId && b.id === 'board-work')
-                        ).length;
-                        return (
-                          <option key={b.id} value={b.id}>
-                            Tablero: {b.name} ({count} tareas)
-                          </option>
-                        );
-                      })}
-                    </select>
+                      <span className="truncate">
+                        {selectedExportBoardId === 'all'
+                          ? `⭐ TODOS los Tableros (${boards.length} tableros)`
+                          : `Tablero: ${boards.find((b) => b.id === selectedExportBoardId)?.name || 'Seleccionado'}`}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                    </button>
 
                     <button
                       type="button"
@@ -1370,6 +1363,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Export Board Selection Modal Picker */}
+      <OptionPickerModal
+        isOpen={isExportBoardPickerOpen}
+        title="Seleccionar Tablero a Exportar"
+        subtitle="Elige si deseas exportar todos los tableros o uno en particular"
+        icon={FolderKanban}
+        options={[
+          {
+            id: 'all',
+            label: `⭐ TODOS los Tableros (${boards.length} tableros)`,
+            description: `Respaldo maestro con ${allTasks.length} tareas totales`,
+          },
+          ...boards.map((b) => ({
+            id: b.id,
+            label: `Tablero: ${b.name}`,
+            description: `${allTasks.filter((t) => t.boardId === b.id || (!t.boardId && b.id === 'board-work')).length} tareas activas`,
+            color: b.color,
+          })),
+        ]}
+        selectedValue={selectedExportBoardId}
+        onSelect={(id) => {
+          setSelectedExportBoardId(id as string);
+          setGeneratedBase64('');
+        }}
+        onClose={() => setIsExportBoardPickerOpen(false)}
+      />
     </div>
   );
 };

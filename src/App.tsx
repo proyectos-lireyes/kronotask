@@ -85,7 +85,15 @@ export default function App() {
   // Persistence States
   const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
   const [boards, setBoards] = useState<Board[]>(() => loadBoards());
-  const [currentBoardId, setCurrentBoardId] = useState<string>(() => loadBoards()[0]?.id || 'board-work');
+  const [currentBoardId, setCurrentBoardId] = useState<string>(() => {
+    try {
+      const savedBoard = localStorage.getItem('chronotask_last_board');
+      if (savedBoard) return savedBoard;
+    } catch (e) {
+      console.error(e);
+    }
+    return 'master';
+  });
   const [types, setTypes] = useState<CustomTypeDefinition[]>(() => loadCustomTypes());
   const [priorities, setPriorities] = useState<CustomPriorityDefinition[]>(() => loadCustomPriorities());
   const [tags, setTags] = useState<CustomTag[]>(() => loadTags());
@@ -100,7 +108,37 @@ export default function App() {
 
   // Views order requested by user:
   // tablero (modal trigger), kanban, tabla, calendario, gantt, eisenhower, historial (plus global dashboard)
-  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'calendar' | 'gantt' | 'eisenhower' | 'history' | 'global'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'calendar' | 'gantt' | 'eisenhower' | 'history' | 'global'>(() => {
+    try {
+      const savedView = localStorage.getItem('chronotask_last_view');
+      if (
+        savedView &&
+        ['kanban', 'table', 'calendar', 'gantt', 'eisenhower', 'history', 'global'].includes(savedView)
+      ) {
+        return savedView as any;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'kanban';
+  });
+
+  // Persist active view & active board to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('chronotask_last_board', currentBoardId);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [currentBoardId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('chronotask_last_view', viewMode);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [viewMode]);
 
   // Modals
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
@@ -177,10 +215,10 @@ export default function App() {
   });
 
   const handleUploadCloudBackup = async (): Promise<boolean> => {
-    if (!currentUser?.uid) return false;
+    if (!currentUser) return false;
     setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
     try {
-      await saveUserDataToCloud(currentUser.uid, {
+      await saveUserDataToCloud(currentUser, {
         tasks,
         boards,
         tags,
@@ -208,10 +246,10 @@ export default function App() {
   };
 
   const handleRestoreCloudBackup = async (): Promise<boolean> => {
-    if (!currentUser?.uid) return false;
+    if (!currentUser) return false;
     setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
     try {
-      const cloudData = await fetchUserDataFromCloud(currentUser.uid);
+      const cloudData = await fetchUserDataFromCloud(currentUser);
       if (cloudData) {
         if (cloudData.tasks && Array.isArray(cloudData.tasks)) {
           setTasks(cloudData.tasks);
@@ -930,6 +968,7 @@ export default function App() {
             tasks={filteredActiveTasks}
             allTags={tags}
             allBoards={boards}
+            allPriorities={priorities}
             isMasterView={isMasterBoard}
             onSelectTask={(task) => {
               setSelectedTask(task);
@@ -956,6 +995,7 @@ export default function App() {
             tasks={filteredActiveTasks}
             allTags={tags}
             allBoards={boards}
+            allPriorities={priorities}
             isMasterView={isMasterBoard}
             onSelectTask={(task) => {
               setSelectedTask(task);
@@ -989,6 +1029,7 @@ export default function App() {
             tasks={filteredActiveTasks}
             allTags={tags}
             allBoards={boards}
+            allPriorities={priorities}
             isMasterView={isMasterBoard}
             onSelectTask={(task) => {
               setSelectedTask(task);
@@ -1002,6 +1043,7 @@ export default function App() {
             tasks={boardTasks}
             allTags={tags}
             allBoards={boards}
+            allPriorities={priorities}
             isMasterView={isMasterBoard}
             searchQuery={searchQuery}
             filterPriority={filterPriority}
@@ -1020,38 +1062,51 @@ export default function App() {
               setIsTaskModalOpen(true);
             }}
             onReclassifyTask={(taskId, targetQuadrant) => {
-              const now = new Date();
+              const now = Date.now();
               const updated = tasks.map((t) => {
                 if (t.id !== taskId) return t;
                 let newPriority = t.priority;
-                let newEnd = new Date(t.endDate);
+                let start = new Date(t.startDate).getTime();
+                let end = new Date(t.endDate).getTime();
+                let totalDuration = Math.max(1000 * 60 * 30, end - start);
 
-                if (targetQuadrant === 1) {
-                  newPriority = 'urgent';
-                  if (newEnd.getTime() - now.getTime() > 48 * 3600 * 1000) {
-                    newEnd = new Date(now.getTime() + 24 * 3600 * 1000);
+                if (typeof targetQuadrant === 'string' && targetQuadrant.includes('_')) {
+                  const [pLevel, uLevel] = targetQuadrant.split('_');
+                  if (pLevel === 'high') newPriority = 'critica';
+                  else if (pLevel === 'med') newPriority = 'media';
+                  else if (pLevel === 'low') newPriority = 'baja';
+
+                  if (uLevel === 'high') {
+                    // Set end date so ~80% of task window has elapsed
+                    end = now + Math.max(1000 * 60 * 15, Math.floor(totalDuration * 0.2));
+                  } else if (uLevel === 'med' || uLevel === 'medium') {
+                    // Set end date so ~60% elapsed
+                    end = now + Math.max(1000 * 60 * 60, Math.floor(totalDuration * 0.4));
+                  } else if (uLevel === 'low') {
+                    // Set end date so ~30% elapsed (plazo holgado)
+                    end = now + Math.max(1000 * 60 * 60 * 24, Math.floor(totalDuration * 0.7));
                   }
-                } else if (targetQuadrant === 2) {
-                  newPriority = 'high';
-                  if (newEnd.getTime() - now.getTime() <= 48 * 3600 * 1000) {
-                    newEnd = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
-                  }
-                } else if (targetQuadrant === 3) {
-                  newPriority = 'low';
-                  if (newEnd.getTime() - now.getTime() > 48 * 3600 * 1000) {
-                    newEnd = new Date(now.getTime() + 24 * 3600 * 1000);
-                  }
-                } else if (targetQuadrant === 4) {
-                  newPriority = 'low';
-                  if (newEnd.getTime() - now.getTime() <= 48 * 3600 * 1000) {
-                    newEnd = new Date(now.getTime() + 14 * 24 * 3600 * 1000);
+                } else {
+                  const qNum = Number(targetQuadrant);
+                  if (qNum === 1) {
+                    newPriority = 'critica';
+                    end = now + Math.max(1000 * 60 * 15, Math.floor(totalDuration * 0.2));
+                  } else if (qNum === 2) {
+                    newPriority = 'alta';
+                    end = now + Math.max(1000 * 60 * 60 * 24, Math.floor(totalDuration * 0.7));
+                  } else if (qNum === 3) {
+                    newPriority = 'media';
+                    end = now + Math.max(1000 * 60 * 15, Math.floor(totalDuration * 0.2));
+                  } else if (qNum === 4) {
+                    newPriority = 'baja';
+                    end = now + Math.max(1000 * 60 * 60 * 24, Math.floor(totalDuration * 0.7));
                   }
                 }
 
                 return {
                   ...t,
                   priority: newPriority,
-                  endDate: newEnd.toISOString(),
+                  endDate: new Date(end).toISOString(),
                   updatedAt: new Date().toISOString(),
                 };
               });

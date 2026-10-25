@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { TaskItem, CustomTag, TaskStatus, Board } from '../types';
+import { TaskItem, CustomTag, TaskStatus, Board, CustomPriorityDefinition } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { formatRecurrenceLabel } from '../utils/recurrence';
+import { sortTasksByPriorityAndUrgency } from '../utils/prioritySort';
+import { OptionPickerModal, PickerOption } from './OptionPickerModal';
 import {
   CheckCircle2,
   Clock,
@@ -23,6 +25,7 @@ interface TaskListViewProps {
   tasks: TaskItem[];
   allTags: CustomTag[];
   allBoards?: Board[];
+  allPriorities?: CustomPriorityDefinition[];
   isMasterView?: boolean;
   onSelectTask: (task: TaskItem) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
@@ -34,6 +37,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
   tasks,
   allTags,
   allBoards,
+  allPriorities,
   isMasterView,
   onSelectTask,
   onStatusChange,
@@ -111,10 +115,8 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
   ]);
 
   const sortedTasks = useMemo(() => {
-    return [...filteredTasks].sort(
-      (a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime()
-    );
-  }, [filteredTasks]);
+    return sortTasksByPriorityAndUrgency(filteredTasks, allPriorities);
+  }, [filteredTasks, allPriorities]);
 
   // Count tallies for quick badges
   const overdueCount = useMemo(() => {
@@ -143,65 +145,115 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
     }).length;
   }, [tasks, startOfThisMonth, endOfThisMonth]);
 
+  const [activePickerModal, setActivePickerModal] = useState<'delivery' | 'status' | 'semaforo' | null>(null);
+
   const hasActiveFilters = deliveryFilter !== 'all' || statusFilter !== 'all' || semaforoFilter !== 'all';
+
+  const deliveryOptions: PickerOption[] = [
+    { id: 'all', label: `Todas las Entregas (${tasks.length})`, description: 'Mostrar todas las tareas sin restricciones' },
+    { id: 'overdue', label: `🚨 Vencidas (${overdueCount})`, description: 'Tareas cuya fecha fin ya transcurrió' },
+    { id: 'this_week', label: `📌 Esta Semana (${thisWeekCount})`, description: 'Entregas programadas para esta semana' },
+    { id: 'next_week', label: `🗓️ Próxima Semana (${nextWeekCount})`, description: 'Entregas programadas para la siguiente semana' },
+    { id: 'this_month', label: `📆 Este Mes (${thisMonthCount})`, description: 'Entregas programadas para este mes' },
+  ];
+
+  const statusOptions: PickerOption[] = [
+    { id: 'all', label: 'Todos los Estados', description: 'Por Hacer, En Progreso, En Espera, En Revisión y Completadas' },
+    { id: 'todo', label: 'Por Hacer', description: 'Tareas pendientes por iniciar' },
+    { id: 'in_progress', label: 'En Progreso', description: 'Tareas activas en desarrollo' },
+    { id: 'waiting', label: 'En Espera (4d)', description: 'Pausadas o esperando insumos' },
+    { id: 'in_review', label: 'En Revisión', description: 'Pendientes de aprobación' },
+    { id: 'done', label: 'Completadas', description: 'Tareas finalizadas' },
+  ];
+
+  const semaforoOptions: PickerOption[] = [
+    { id: 'all', label: 'Todos los Semáforos', description: 'Verde, Azul, Amarillo, Naranja, Rojo y Negro' },
+    { id: 'green', label: '🟢 Verde (>50%)', description: 'Tiempo holgado restante' },
+    { id: 'blue', label: '🔵 Azul (25-50%)', description: 'Avance normal' },
+    { id: 'yellow', label: '🟡 Amarillo (10-25%)', description: 'Atención recomendada' },
+    { id: 'orange', label: '🟠 Naranja (<10%)', description: 'Próxima a vencer' },
+    { id: 'red', label: '🔴 Rojo (Crítico)', description: 'Urgencia máxima' },
+    { id: 'black', label: '⚫ Negro (Vencidas)', description: 'Fecha de entrega superada' },
+  ];
 
   return (
     <div className="space-y-3">
-      {/* Top Filter Bar (Strict Single-Line with 3 compact selectors) */}
+      {/* Top Filter Bar with Touch/Mobile Modal Triggers */}
       <div className="bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-1 sm:gap-2 w-full">
-        {/* 1. Entrega Selector with Calendar icon */}
-        <div className="flex-1 min-w-0 flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 rounded-xl transition-colors overflow-hidden">
-          <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-          <select
-            value={deliveryFilter}
-            onChange={(e) => setDeliveryFilter(e.target.value as DeliveryFilterType)}
-            className="w-full min-w-0 bg-transparent text-slate-800 text-[11px] sm:text-xs font-bold focus:outline-hidden cursor-pointer truncate"
-            title="Filtrar por Entrega"
-          >
-            <option value="all">Entrega ({tasks.length})</option>
-            <option value="overdue">🚨 Vencidas ({overdueCount})</option>
-            <option value="this_week">📌 Esta Semana ({thisWeekCount})</option>
-            <option value="next_week">🗓️ Próx. Semana ({nextWeekCount})</option>
-            <option value="this_month">📆 Este Mes ({thisMonthCount})</option>
-          </select>
-        </div>
+        {/* 1. Entrega Modal Trigger */}
+        <button
+          type="button"
+          onClick={() => setActivePickerModal('delivery')}
+          className="flex-1 min-w-0 flex items-center justify-between gap-1 px-2 sm:px-3 py-1.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 rounded-xl transition-all cursor-pointer text-left"
+        >
+          <div className="flex items-center gap-1.5 truncate">
+            <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="text-[11px] sm:text-xs font-bold text-slate-800 truncate">
+              {deliveryFilter === 'all'
+                ? `Entrega (${tasks.length})`
+                : deliveryFilter === 'overdue'
+                ? `🚨 Vencidas (${overdueCount})`
+                : deliveryFilter === 'this_week'
+                ? `📌 Esta Sem. (${thisWeekCount})`
+                : deliveryFilter === 'next_week'
+                ? `🗓️ Próx. Sem. (${nextWeekCount})`
+                : `📆 Este Mes (${thisMonthCount})`}
+            </span>
+          </div>
+          <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+        </button>
 
-        {/* 2. Estado Selector with CheckCircle icon */}
-        <div className="flex-1 min-w-0 flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 rounded-xl transition-colors overflow-hidden">
-          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full min-w-0 bg-transparent text-slate-800 text-[11px] sm:text-xs font-bold focus:outline-hidden cursor-pointer truncate"
-            title="Filtrar por Estado"
-          >
-            <option value="all">Estado: Todos</option>
-            <option value="todo">Por Hacer</option>
-            <option value="in_progress">En Progreso</option>
-            <option value="waiting">En Espera (4d)</option>
-            <option value="in_review">En Revisión</option>
-            <option value="done">Completada</option>
-          </select>
-        </div>
+        {/* 2. Estado Modal Trigger */}
+        <button
+          type="button"
+          onClick={() => setActivePickerModal('status')}
+          className="flex-1 min-w-0 flex items-center justify-between gap-1 px-2 sm:px-3 py-1.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 rounded-xl transition-all cursor-pointer text-left"
+        >
+          <div className="flex items-center gap-1.5 truncate">
+            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            <span className="text-[11px] sm:text-xs font-bold text-slate-800 truncate">
+              {statusFilter === 'all'
+                ? 'Estado: Todos'
+                : statusFilter === 'todo'
+                ? 'Por Hacer'
+                : statusFilter === 'in_progress'
+                ? 'En Progreso'
+                : statusFilter === 'waiting'
+                ? 'En Espera'
+                : statusFilter === 'in_review'
+                ? 'En Revisión'
+                : 'Completada'}
+            </span>
+          </div>
+          <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+        </button>
 
-        {/* 3. Semáforo Selector with Clock icon */}
-        <div className="flex-1 min-w-0 flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 rounded-xl transition-colors overflow-hidden">
-          <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-          <select
-            value={semaforoFilter}
-            onChange={(e) => setSemaforoFilter(e.target.value)}
-            className="w-full min-w-0 bg-transparent text-slate-800 text-[11px] sm:text-xs font-bold focus:outline-hidden cursor-pointer truncate"
-            title="Filtrar por Semáforo"
-          >
-            <option value="all">Semáforo: Todos</option>
-            <option value="green">🟢 Verde (&gt;50%)</option>
-            <option value="blue">🔵 Azul (25-50%)</option>
-            <option value="yellow">🟡 Amarillo (10-25%)</option>
-            <option value="orange">🟠 Naranja (&lt;10%)</option>
-            <option value="red">🔴 Rojo (Crítico)</option>
-            <option value="black">⚫ Negro (Vencidas)</option>
-          </select>
-        </div>
+        {/* 3. Semáforo Modal Trigger */}
+        <button
+          type="button"
+          onClick={() => setActivePickerModal('semaforo')}
+          className="flex-1 min-w-0 flex items-center justify-between gap-1 px-2 sm:px-3 py-1.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 rounded-xl transition-all cursor-pointer text-left"
+        >
+          <div className="flex items-center gap-1.5 truncate">
+            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="text-[11px] sm:text-xs font-bold text-slate-800 truncate">
+              {semaforoFilter === 'all'
+                ? 'Semáforo: Todos'
+                : semaforoFilter === 'green'
+                ? '🟢 Verde'
+                : semaforoFilter === 'blue'
+                ? '🔵 Azul'
+                : semaforoFilter === 'yellow'
+                ? '🟡 Amarillo'
+                : semaforoFilter === 'orange'
+                ? '🟠 Naranja'
+                : semaforoFilter === 'red'
+                ? '🔴 Rojo'
+                : '⚫ Negro'}
+            </span>
+          </div>
+          <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+        </button>
 
         {/* Clear Filters Button (compact inline) */}
         {hasActiveFilters && (
@@ -227,10 +279,9 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[11px] tracking-wider">
               <tr>
                 <th className="py-3 px-4 w-10"></th>
-                {isMasterView && <th className="py-3 px-4">Tablero</th>}
-                {/* Full name priority: expanded min-width to ensure entire title is always visible */}
-                <th className="py-3 px-4 min-w-[300px] sm:min-w-[360px]">Nombre Completo de la Tarea</th>
                 <th className="py-3 px-4 whitespace-nowrap">Semáforo de Tiempo</th>
+                <th className="py-3 px-4 min-w-[300px] sm:min-w-[360px]">Nombre Completo de la Tarea</th>
+                {isMasterView && <th className="py-3 px-4 whitespace-nowrap">Tablero</th>}
                 <th className="py-3 px-4 whitespace-nowrap">Estado</th>
                 <th className="py-3 px-4 whitespace-nowrap">Prioridad</th>
                 <th className="py-3 px-4 whitespace-nowrap">Tipo</th>
@@ -272,23 +323,25 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                         </button>
                       </td>
 
-                      {isMasterView && (
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          {taskBoard ? (
-                            <span
-                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white shadow-2xs"
-                              style={{ backgroundColor: taskBoard.color }}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                              {taskBoard.name}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-[10px]">General</span>
-                          )}
-                        </td>
-                      )}
+                      {/* 1. Semáforo de Tiempo FIRST */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold border text-[11px] ${timeCalc.badgeBg}`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              timeCalc.isOverdue && !isDone
+                                ? 'bg-amber-400 animate-ping'
+                                : timeCalc.level === 'red'
+                                ? 'bg-rose-500'
+                                : 'bg-current'
+                            }`}
+                          />
+                          {timeCalc.remainingText}
+                        </span>
+                      </td>
 
-                      {/* Full Task Name with No Truncation */}
+                      {/* 2. Full Task Name */}
                       <td className="py-3 px-4 min-w-[300px] sm:min-w-[360px]">
                         <div className="font-bold text-slate-900 text-xs sm:text-sm break-words whitespace-normal leading-relaxed">
                           {task.title}
@@ -312,22 +365,21 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                         </div>
                       </td>
 
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold border text-[11px] ${timeCalc.badgeBg}`}
-                        >
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              timeCalc.isOverdue && !isDone
-                                ? 'bg-amber-400 animate-ping'
-                                : timeCalc.level === 'red'
-                                ? 'bg-rose-500'
-                                : 'bg-current'
-                            }`}
-                          />
-                          {timeCalc.remainingText}
-                        </span>
-                      </td>
+                      {isMasterView && (
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {taskBoard ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white shadow-2xs"
+                              style={{ backgroundColor: taskBoard.color }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                              {taskBoard.name}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">General</span>
+                          )}
+                        </td>
+                      )}
 
                       <td className="py-3 px-4 whitespace-nowrap">
                         <span className="px-2 py-0.5 rounded-md font-medium capitalize bg-slate-100 text-slate-700">
@@ -393,6 +445,40 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Option Picker Modals for Filter Selections */}
+      <OptionPickerModal
+        isOpen={activePickerModal === 'delivery'}
+        title="Filtrar por Entrega"
+        subtitle="Muestra tareas según la cercanía o estado de entrega"
+        icon={Calendar}
+        options={deliveryOptions}
+        selectedValue={deliveryFilter}
+        onSelect={(id: any) => setDeliveryFilter(id as DeliveryFilterType)}
+        onClose={() => setActivePickerModal(null)}
+      />
+
+      <OptionPickerModal
+        isOpen={activePickerModal === 'status'}
+        title="Filtrar por Estado"
+        subtitle="Muestra tareas según la etapa de avance actual"
+        icon={CheckCircle2}
+        options={statusOptions}
+        selectedValue={statusFilter}
+        onSelect={(id: any) => setStatusFilter(String(id))}
+        onClose={() => setActivePickerModal(null)}
+      />
+
+      <OptionPickerModal
+        isOpen={activePickerModal === 'semaforo'}
+        title="Filtrar por Semáforo de Tiempo"
+        subtitle="Muestra tareas según el porcentaje de tiempo transcurrido o urgencia"
+        icon={Clock}
+        options={semaforoOptions}
+        selectedValue={semaforoFilter}
+        onSelect={(id: any) => setSemaforoFilter(String(id))}
+        onClose={() => setActivePickerModal(null)}
+      />
     </div>
   );
 };

@@ -1,25 +1,85 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { TaskItem, CustomTag, Board } from '../types';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { TaskItem, CustomTag, Board, CustomPriorityDefinition } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
-import { ChevronLeft, ChevronRight, Calendar, ZoomIn, ZoomOut, Clock } from 'lucide-react';
+import { sortTasksByPriorityAndUrgency, sortTasksByDeadlineAndPriority } from '../utils/prioritySort';
+import { ChevronLeft, ChevronRight, Calendar, ZoomIn, ZoomOut, Clock, ArrowUpDown, ChevronDown } from 'lucide-react';
+import { OptionPickerModal, PickerOption } from './OptionPickerModal';
 
 interface GanttViewProps {
   tasks: TaskItem[];
   allTags: CustomTag[];
   allBoards?: Board[];
+  allPriorities?: CustomPriorityDefinition[];
   isMasterView?: boolean;
   onSelectTask: (task: TaskItem) => void;
 }
+
+type GanttSortMode = 'start_date' | 'priority' | 'deadline';
 
 export const GanttView: React.FC<GanttViewProps> = ({
   tasks,
   allTags,
   allBoards,
+  allPriorities,
   isMasterView,
   onSelectTask,
 }) => {
   const [zoomDays, setZoomDays] = useState<number>(14); // 7, 14, 30 days
   const [startDateOffset, setStartDateOffset] = useState<number>(-2); // days before today to start timeline
+  const [isSortPickerOpen, setIsSortPickerOpen] = useState(false);
+  const [ganttSortMode, setGanttSortMode] = useState<GanttSortMode>(() => {
+    try {
+      const saved = localStorage.getItem('chronotask_gantt_sort_mode');
+      if (saved && ['start_date', 'priority', 'deadline'].includes(saved)) {
+        return saved as GanttSortMode;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'start_date'; // Default by start date as requested
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('chronotask_gantt_sort_mode', ganttSortMode);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [ganttSortMode]);
+
+  const sortedGanttTasks = useMemo(() => {
+    if (ganttSortMode === 'priority') {
+      return sortTasksByPriorityAndUrgency(tasks, allPriorities);
+    }
+    if (ganttSortMode === 'deadline') {
+      return sortTasksByDeadlineAndPriority(tasks, allPriorities);
+    }
+    // Default: 'start_date' (earliest start date first)
+    return [...tasks].sort((a, b) => {
+      const startA = new Date(a.startDate).getTime();
+      const startB = new Date(b.startDate).getTime();
+      if (startA !== startB) return startA - startB;
+      return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+    });
+  }, [tasks, allPriorities, ganttSortMode]);
+
+  const ganttSortOptions: PickerOption[] = [
+    {
+      id: 'start_date',
+      label: '📅 Por Fecha de Inicio (Predeterminado)',
+      description: 'Ordena cronológicamente según la fecha de comienzo de la tarea',
+    },
+    {
+      id: 'priority',
+      label: '⚡ Por Prioridad y Urgencia (Matriz 3x3)',
+      description: 'Ordena por el puntaje de prioridad e importancia de la matriz',
+    },
+    {
+      id: 'deadline',
+      label: '🎯 Por Fecha Límite de Entrega',
+      description: 'Ordena colocando primero las tareas con entrega más cercana',
+    },
+  ];
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -65,17 +125,34 @@ export const GanttView: React.FC<GanttViewProps> = ({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col">
-      {/* Gantt Top Controls */}
+      {/* Gantt Top Controls Header */}
       <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-blue-600" />
-          <h2 className="text-sm font-bold text-slate-800">Diagrama de Gantt</h2>
-          <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-            Cronograma interactivo de entregas y duraciones
-          </span>
+        {/* Left Header Container: Title + Aligned Modal Sort Selector on the SAME line */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
+          <h2 className="text-sm font-bold text-slate-800 shrink-0">Diagrama de Gantt</h2>
+
+          {/* Gantt Modal Selector Button (Aligned right beside title) */}
+          <button
+            type="button"
+            onClick={() => setIsSortPickerOpen(true)}
+            className="flex items-center gap-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 shadow-2xs cursor-pointer transition-all active:scale-95"
+            title="Cambiar criterio de ordenación del Gantt"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>
+              {ganttSortMode === 'start_date'
+                ? '📅 Por Fecha de Inicio'
+                : ganttSortMode === 'priority'
+                ? '⚡ Por Prioridad y Urgencia'
+                : '🎯 Por Fecha Límite'}
+            </span>
+            <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Right Header Container: Timeline Navigation & Zoom */}
+        <div className="flex items-center flex-wrap gap-2">
           {/* Timeline Navigation */}
           <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5">
             <button
@@ -119,6 +196,18 @@ export const GanttView: React.FC<GanttViewProps> = ({
         </div>
       </div>
 
+      {/* Option Picker Modal for Gantt Sort Mode */}
+      <OptionPickerModal
+        isOpen={isSortPickerOpen}
+        title="Ordenar Diagrama de Gantt"
+        subtitle="Selecciona cómo organizar visualmente la secuencia de tareas"
+        icon={ArrowUpDown}
+        options={ganttSortOptions}
+        selectedValue={ganttSortMode}
+        onSelect={(id) => setGanttSortMode(id as GanttSortMode)}
+        onClose={() => setIsSortPickerOpen(false)}
+      />
+
       {/* Gantt Timeline View Area */}
       <div
         ref={scrollContainerRef}
@@ -159,7 +248,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
                 No hay tareas para graficar en este periodo.
               </div>
             ) : (
-              tasks.map((task) => {
+              sortedGanttTasks.map((task) => {
                 const isDone = task.status === 'done';
                 const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
                 const leftPos = getPositionPercent(task.startDate);

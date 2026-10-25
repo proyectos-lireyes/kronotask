@@ -89,35 +89,92 @@ export interface CloudUserData {
   customPriorities?: CustomPriorityDefinition[];
 }
 
-export async function saveUserDataToCloud(uid: string, data: Partial<CloudUserData>) {
-  if (!uid) return;
+export function getEmailDocKey(email: string): string {
+  return `email_${email.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
+}
+
+export async function saveUserDataToCloud(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  data: Partial<CloudUserData>
+) {
+  let uid = '';
+  let email = '';
+
+  if (typeof userKeyOrProfile === 'object' && userKeyOrProfile !== null) {
+    uid = userKeyOrProfile.uid || '';
+    email = userKeyOrProfile.email || '';
+  } else {
+    uid = String(userKeyOrProfile || '');
+  }
+
+  if (!uid && !email) return;
+
+  const payload = {
+    uid: uid || email,
+    email: email || '',
+    updatedAt: new Date().toISOString(),
+    ...data,
+  };
+
+  const writePromises: Promise<any>[] = [];
+
+  // 1. Primary: Email-based document key (enables 100% cross-platform Android & Web sync)
+  if (email) {
+    const emailKey = getEmailDocKey(email);
+    writePromises.push(setDoc(doc(db, 'user_data', emailKey), payload, { merge: true }));
+  }
+
+  // 2. Secondary: Direct UID document key fallback
+  if (uid) {
+    writePromises.push(setDoc(doc(db, 'user_data', uid), payload, { merge: true }));
+  }
+
   try {
-    const userDocRef = doc(db, 'user_data', uid);
-    await setDoc(
-      userDocRef,
-      {
-        uid,
-        updatedAt: new Date().toISOString(),
-        ...data,
-      },
-      { merge: true }
-    );
+    await Promise.all(writePromises);
   } catch (e) {
     console.warn('Error guardando copia de respaldo en la nube:', e);
+    throw e;
   }
 }
 
-export async function fetchUserDataFromCloud(uid: string): Promise<Partial<CloudUserData> | null> {
-  if (!uid) return null;
-  try {
-    const userDocRef = doc(db, 'user_data', uid);
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
-      return snap.data() as Partial<CloudUserData>;
-    }
-  } catch (e) {
-    console.warn('Error recuperando respaldo de la nube:', e);
+export async function fetchUserDataFromCloud(
+  userKeyOrProfile: string | { uid?: string; email?: string }
+): Promise<Partial<CloudUserData> | null> {
+  let uid = '';
+  let email = '';
+
+  if (typeof userKeyOrProfile === 'object' && userKeyOrProfile !== null) {
+    uid = userKeyOrProfile.uid || '';
+    email = userKeyOrProfile.email || '';
+  } else {
+    uid = String(userKeyOrProfile || '');
   }
+
+  // 1. Try reading from Email doc key first
+  if (email) {
+    const emailKey = getEmailDocKey(email);
+    try {
+      const snap = await getDoc(doc(db, 'user_data', emailKey));
+      if (snap.exists()) {
+        return snap.data() as Partial<CloudUserData>;
+      }
+    } catch (e) {
+      console.warn('Error recuperando respaldo por email en la nube:', e);
+    }
+  }
+
+  // 2. Try reading from UID doc key fallback
+  if (uid) {
+    try {
+      const snap = await getDoc(doc(db, 'user_data', uid));
+      if (snap.exists()) {
+        return snap.data() as Partial<CloudUserData>;
+      }
+    } catch (e) {
+      console.warn('Error recuperando respaldo por UID en la nube:', e);
+    }
+  }
+
   return null;
 }
 
