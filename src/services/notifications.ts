@@ -164,6 +164,40 @@ export async function sendPushNotification(title: string, options?: Notification
 const notifiedEventsCache = new Set<string>();
 const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
 
+function formatTime(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return isoString;
+  }
+}
+
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case 'todo':
+      return 'Por Hacer';
+    case 'in_progress':
+      return 'En Progreso';
+    case 'waiting':
+      return 'En Espera';
+    case 'in_review':
+      return 'En Revisión';
+    case 'done':
+      return 'Completada';
+    default:
+      return status;
+  }
+}
+
+function buildTaskBody(task: TaskItem, extraInfo?: string): string {
+  const sTime = formatTime(task.startDate);
+  const eTime = formatTime(task.endDate);
+  const stLabel = getStatusLabel(task.status);
+  const base = `⏰ Inicio: ${sTime} - Fin: ${eTime} | Estado: ${stLabel}`;
+  return extraInfo ? `${base}\n${extraInfo}` : base;
+}
+
 export function checkTaskRemindersAndSchedules(
   tasks: TaskItem[],
   onInAppNotification: (notif: InAppNotification) => void,
@@ -180,13 +214,14 @@ export function checkTaskRemindersAndSchedules(
 
       if (waitingElapsed >= FOUR_DAYS_MS) {
         soundService.playChime('reminder');
+        const bodyText = buildTaskBody(task, `Estuvo en espera durante 4 días. Cambiada a 'En Progreso'.`);
         sendPushNotification(`⚡ Reactivación Automática: ${task.title}`, {
-          body: `Estuvo en espera durante 4 días. Se ha cambiado automáticamente a 'En Progreso'.`,
+          body: bodyText,
         });
         onInAppNotification({
           id: `reactivate-${task.id}-${now}`,
-          title: 'Reactivación Automática',
-          body: `"${task.title}" cumplió los 4 días en espera y regresó a En Progreso.`,
+          title: `Reactivación: ${task.title}`,
+          body: bodyText,
           type: 'info',
           timestamp: new Date().toISOString(),
           taskId: task.id,
@@ -212,21 +247,25 @@ export function checkTaskRemindersAndSchedules(
 
     if (tasksToday.length > 0) {
       notifiedEventsCache.add(dailyBriefingKey);
+      const briefingBody = tasksToday
+        .map((t) => `• ${t.title}\n  Inicio: ${formatTime(t.startDate)} - Fin: ${formatTime(t.endDate)} | Estado: ${getStatusLabel(t.status)}`)
+        .join('\n\n');
+
       sendPushNotification(`📅 Agenda de Hoy: ${tasksToday.length} tarea(s)`, {
-        body: `Tienes ${tasksToday.length} entrega(s) programadas para hoy. Toca para verlas.`,
+        body: briefingBody,
       });
       onInAppNotification({
         id: `daily-note-${todayDateStr}`,
         title: `📅 Agenda de Hoy (${tasksToday.length} tareas)`,
-        body: `Tienes ${tasksToday.length} tarea(s) con fecha límite hoy.`,
+        body: briefingBody,
         type: 'info',
         timestamp: new Date().toISOString(),
       });
     }
   }
 
-  // 3. Monday Weekly Briefing Check (Tasks for this week through Sunday)
-  const isMonday = new Date().getDay() === 1; // 1 = Monday
+  // 3. Monday Weekly Briefing Check
+  const isMonday = new Date().getDay() === 1;
   const weeklyBriefingKey = `weekly-briefing-${todayDateStr}`;
   if (isMonday && !notifiedEventsCache.has(weeklyBriefingKey)) {
     const sunday = new Date();
@@ -241,13 +280,18 @@ export function checkTaskRemindersAndSchedules(
 
     if (tasksThisWeek.length > 0) {
       notifiedEventsCache.add(weeklyBriefingKey);
-      sendPushNotification(`🗓️ Resumen Semanal: ${tasksThisWeek.length} tarea(s) esta semana`, {
-        body: `Planificación de Lunes a Domingo: ${tasksThisWeek.length} tareas pendientes en tu tablero.`,
+      const weeklyBody = tasksThisWeek
+        .slice(0, 5)
+        .map((t) => `• ${t.title} (${formatTime(t.startDate)} - ${formatTime(t.endDate)}) [${getStatusLabel(t.status)}]`)
+        .join('\n');
+
+      sendPushNotification(`🗓️ Resumen Semanal: ${tasksThisWeek.length} tareas`, {
+        body: weeklyBody,
       });
       onInAppNotification({
         id: `weekly-note-${todayDateStr}`,
         title: `🗓️ Resumen Semanal (${tasksThisWeek.length} tareas)`,
-        body: `Planificación semanal activa hasta el domingo con ${tasksThisWeek.length} entregas.`,
+        body: weeklyBody,
         type: 'info',
         timestamp: new Date().toISOString(),
       });
@@ -272,13 +316,12 @@ export function checkTaskRemindersAndSchedules(
           if (startDiffMinutes <= rem.offsetMinutes && startDiffMinutes >= rem.offsetMinutes - 2) {
             notifiedEventsCache.add(startRemKey);
             soundService.playChime('reminder');
-            sendPushNotification(`🚀 Inicia Pronto: ${task.title}`, {
-              body: `Faltan ${rem.offsetMinutes} minutos para iniciar la tarea programada.`,
-            });
+            const body = buildTaskBody(task, `Inicia en ${rem.offsetMinutes} minutos.`);
+            sendPushNotification(`🚀 Inicia Pronto: ${task.title}`, { body });
             onInAppNotification({
               id: `notif-start-${Date.now()}-${Math.random()}`,
               title: `🚀 Inicia Pronto: ${task.title}`,
-              body: `Tu tarea está programada para comenzar en ${rem.offsetMinutes} minutos.`,
+              body,
               type: 'reminder',
               timestamp: new Date().toISOString(),
               taskId: task.id,
@@ -293,31 +336,29 @@ export function checkTaskRemindersAndSchedules(
     if (startDiffMinutes <= 0 && startDiffMinutes >= -3 && !notifiedEventsCache.has(startExactKey)) {
       notifiedEventsCache.add(startExactKey);
       soundService.playChime('reminder');
-      sendPushNotification(`▶️ ¡Hora de Iniciar!: ${task.title}`, {
-        body: `Llegó la hora de inicio programada. ¡Comienza a trabajar en ella!`,
-      });
+      const body = buildTaskBody(task, `Llegó la hora de inicio programada.`);
+      sendPushNotification(`▶️ ¡Hora de Iniciar!: ${task.title}`, { body });
       onInAppNotification({
         id: `notif-startexact-${Date.now()}-${Math.random()}`,
-        title: `▶️ ¡Hora de Iniciar Tarea!`,
-        body: `"${task.title}" debe comenzar ahora mismo.`,
+        title: `▶️ ¡Hora de Iniciar!: ${task.title}`,
+        body,
         type: 'info',
         timestamp: new Date().toISOString(),
         taskId: task.id,
       });
     }
 
-    // Task Start Passed but Still in "Por Hacer" (Pending Start Alert)
+    // Task Start Passed but Still in "Por Hacer"
     const unstartedPendingKey = `unstarted-${task.id}-${todayDateStr}`;
     if (now > start && task.status === 'todo' && !notifiedEventsCache.has(unstartedPendingKey)) {
       notifiedEventsCache.add(unstartedPendingKey);
       soundService.playChime('reminder');
-      sendPushNotification(`⚠️ Inicio Pendiente: ${task.title}`, {
-        body: `Su hora de inicio fue ${new Date(task.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} y sigue en 'Por Hacer'.`,
-      });
+      const body = buildTaskBody(task, `Hora de inicio transcurrida; sigue en 'Por Hacer'.`);
+      sendPushNotification(`⚠️ Inicio Pendiente: ${task.title}`, { body });
       onInAppNotification({
         id: `notif-unstarted-${Date.now()}-${Math.random()}`,
-        title: `⚠️ Tarea por Iniciar`,
-        body: `"${task.title}" debió iniciar a las ${new Date(task.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} y sigue pendiente en Por Hacer.`,
+        title: `⚠️ Tarea por Iniciar: ${task.title}`,
+        body,
         type: 'warning',
         timestamp: new Date().toISOString(),
         taskId: task.id,
@@ -332,13 +373,12 @@ export function checkTaskRemindersAndSchedules(
           if (endDiffMinutes <= rem.offsetMinutes && endDiffMinutes >= rem.offsetMinutes - 2) {
             notifiedEventsCache.add(endRemKey);
             soundService.playChime('reminder');
-            sendPushNotification(`⏰ Recordatorio Vencimiento: ${task.title}`, {
-              body: `Faltan ${rem.offsetMinutes} minutos para la fecha límite de entrega.`,
-            });
+            const body = buildTaskBody(task, `Faltan ${rem.offsetMinutes} minutos para la fecha límite.`);
+            sendPushNotification(`⏰ Recordatorio Vencimiento: ${task.title}`, { body });
             onInAppNotification({
               id: `notif-end-${Date.now()}-${Math.random()}`,
               title: `Recordatorio: ${task.title}`,
-              body: `Faltan ${rem.offsetMinutes} minutos para la entrega.`,
+              body,
               type: 'reminder',
               timestamp: new Date().toISOString(),
               taskId: task.id,
@@ -353,13 +393,12 @@ export function checkTaskRemindersAndSchedules(
     if (endDiffMinutes <= 15 && endDiffMinutes > 0 && !notifiedEventsCache.has(imminentKey)) {
       notifiedEventsCache.add(imminentKey);
       soundService.playChime('reminder');
-      sendPushNotification(`⚠️ Vencimiento Próximo: ${task.title}`, {
-        body: `Quedan menos de 15 minutos para la entrega.`,
-      });
+      const body = buildTaskBody(task, `Quedan ${endDiffMinutes} minutos para el plazo límite.`);
+      sendPushNotification(`⚠️ Vencimiento Próximo: ${task.title}`, { body });
       onInAppNotification({
         id: `notif-${Date.now()}-${Math.random()}`,
         title: `Vencimiento Próximo: ${task.title}`,
-        body: `Quedan ${endDiffMinutes} minutos para vencer el plazo.`,
+        body,
         type: 'warning',
         timestamp: new Date().toISOString(),
         taskId: task.id,
@@ -371,13 +410,12 @@ export function checkTaskRemindersAndSchedules(
     if (now >= end && !notifiedEventsCache.has(overdueKey)) {
       notifiedEventsCache.add(overdueKey);
       soundService.playChime('overdue');
-      sendPushNotification(`🚨 Tarea Vencida: ${task.title}`, {
-        body: `La fecha límite ha sido superada. Nivel Negro activado.`,
-      });
+      const body = buildTaskBody(task, `Fecha límite superada.`);
+      sendPushNotification(`🚨 Tarea Vencida: ${task.title}`, { body });
       onInAppNotification({
         id: `notif-${Date.now()}-${Math.random()}`,
-        title: `¡Tarea Vencida!`,
-        body: `"${task.title}" ha superado su plazo límite.`,
+        title: `🚨 Tarea Vencida: ${task.title}`,
+        body,
         type: 'overdue',
         timestamp: new Date().toISOString(),
         taskId: task.id,
@@ -410,13 +448,14 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
 
       const startTime = new Date(task.startDate).getTime();
       const endTime = new Date(task.endDate).getTime();
+      const body = buildTaskBody(task);
 
       // 1. Task Start Exact Time Notification
       if (startTime > now) {
         notificationsToSchedule.push({
           id: idCounter++,
           title: `▶️ ¡Hora de Iniciar!: ${task.title}`,
-          body: `Llegó la hora de inicio de tu tarea "${task.title}".`,
+          body,
           channelId: 'kronotask_alerts',
           schedule: { at: new Date(startTime) },
         });
@@ -429,8 +468,8 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
           if (remTime > now) {
             notificationsToSchedule.push({
               id: idCounter++,
-              title: `🚀 Recordatorio de Inicio: ${task.title}`,
-              body: `Faltan ${rem.offsetMinutes} minutos para iniciar "${task.title}".`,
+              title: `🚀 Recordatorio (Faltan ${rem.offsetMinutes}m): ${task.title}`,
+              body,
               channelId: 'kronotask_alerts',
               schedule: { at: new Date(remTime) },
             });
@@ -442,8 +481,8 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
       if (endTime > now) {
         notificationsToSchedule.push({
           id: idCounter++,
-          title: `⚠️ Fecha Límite de Entrega: ${task.title}`,
-          body: `La tarea "${task.title}" debe entregarse ahora.`,
+          title: `⚠️ Fecha Límite: ${task.title}`,
+          body,
           channelId: 'kronotask_alerts',
           schedule: { at: new Date(endTime) },
         });
@@ -456,8 +495,8 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
           if (remEnd > now) {
             notificationsToSchedule.push({
               id: idCounter++,
-              title: `⏰ Recordatorio de Entrega: ${task.title}`,
-              body: `Faltan ${rem.offsetMinutes} minutos para vencer "${task.title}".`,
+              title: `⏰ Recordatorio Entrega (${rem.offsetMinutes}m): ${task.title}`,
+              body,
               channelId: 'kronotask_alerts',
               schedule: { at: new Date(remEnd) },
             });
@@ -467,7 +506,6 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
     });
 
     if (notificationsToSchedule.length > 0) {
-      // Schedule max 50 pending notifications to keep within Android OS limits
       await LocalNotifications.schedule({
         notifications: notificationsToSchedule.slice(0, 50),
       });
