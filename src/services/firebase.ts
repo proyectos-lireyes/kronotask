@@ -231,46 +231,72 @@ export async function fetchUserDataFromCloud(
   return null;
 }
 
+let isGoogleAuthInitialized = false;
+
+async function ensureGoogleAuthInit(): Promise<boolean> {
+  if (isGoogleAuthInitialized) return true;
+  if (!Capacitor.isNativePlatform()) return false;
+  
+  try {
+    const clientId = firebaseConfig.oAuthClientId || '';
+    if (clientId && GoogleAuth && typeof GoogleAuth.initialize === 'function') {
+      await GoogleAuth.initialize({
+        clientId: clientId,
+        scopes: ['profile', 'email'],
+        grantOfflineAccess: false,
+      });
+      isGoogleAuthInitialized = true;
+      return true;
+    }
+  } catch (e) {
+    console.warn('GoogleAuth initialize note:', e);
+  }
+  return false;
+}
+
 export const googleSignIn = async (): Promise<{ user: User | any; accessToken: string; profile: UserProfile } | null> => {
   try {
     const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
-    // 1. Native Android App: Google Play Services Native Sign-In
+    // 1. Native Android App: Google Play Services Native Sign-In (Safeguarded)
     if (isNativeAndroid) {
       try {
-        const googleUser = await GoogleAuth.signIn();
-        if (googleUser && googleUser.email) {
-          const idToken = googleUser.authentication?.idToken || '';
-          const accessToken = googleUser.authentication?.accessToken || '';
+        const canUseNative = await ensureGoogleAuthInit();
+        if (canUseNative) {
+          const googleUser = await GoogleAuth.signIn();
+          if (googleUser && googleUser.email) {
+            const idToken = googleUser.authentication?.idToken || '';
+            const accessToken = googleUser.authentication?.accessToken || '';
 
-          if (idToken) {
-            try {
-              const credential = GoogleAuthProvider.credential(idToken, accessToken);
-              const userCred = await signInWithCredential(auth, credential);
-              cachedAccessToken = accessToken || idToken;
-              const profile: UserProfile = {
-                uid: userCred.user.uid,
-                displayName: userCred.user.displayName || googleUser.name || googleUser.email.split('@')[0],
-                email: userCred.user.email || googleUser.email,
-                photoURL: userCred.user.photoURL || googleUser.imageUrl,
-              };
-              saveStoredUserProfile(profile);
-              return { user: userCred.user, accessToken: cachedAccessToken, profile };
-            } catch (credErr) {
-              console.warn('Firebase credential signin note:', credErr);
+            if (idToken) {
+              try {
+                const credential = GoogleAuthProvider.credential(idToken, accessToken);
+                const userCred = await signInWithCredential(auth, credential);
+                cachedAccessToken = accessToken || idToken;
+                const profile: UserProfile = {
+                  uid: userCred.user.uid,
+                  displayName: userCred.user.displayName || googleUser.name || googleUser.email.split('@')[0],
+                  email: userCred.user.email || googleUser.email,
+                  photoURL: userCred.user.photoURL || googleUser.imageUrl,
+                };
+                saveStoredUserProfile(profile);
+                return { user: userCred.user, accessToken: cachedAccessToken, profile };
+              } catch (credErr) {
+                console.warn('Firebase credential signin note:', credErr);
+              }
             }
-          }
 
-          // Fallback profile from native GoogleUser if Firebase auth bridge fails
-          const profile: UserProfile = {
-            uid: `google-${googleUser.email.replace(/[^a-z0-9]/gi, '_')}`,
-            displayName: googleUser.name || googleUser.givenName || googleUser.email.split('@')[0],
-            email: googleUser.email,
-            photoURL: googleUser.imageUrl || undefined,
-          };
-          cachedAccessToken = accessToken || idToken || `token-${Date.now()}`;
-          saveStoredUserProfile(profile);
-          return { user: { uid: profile.uid, email: profile.email, displayName: profile.displayName }, accessToken: cachedAccessToken, profile };
+            // Fallback profile from native GoogleUser if Firebase auth bridge fails
+            const profile: UserProfile = {
+              uid: `google-${googleUser.email.replace(/[^a-z0-9]/gi, '_')}`,
+              displayName: googleUser.name || googleUser.givenName || googleUser.email.split('@')[0],
+              email: googleUser.email,
+              photoURL: googleUser.imageUrl || undefined,
+            };
+            cachedAccessToken = accessToken || idToken || `token-${Date.now()}`;
+            saveStoredUserProfile(profile);
+            return { user: { uid: profile.uid, email: profile.email, displayName: profile.displayName }, accessToken: cachedAccessToken, profile };
+          }
         }
       } catch (nativeErr: any) {
         console.warn('Native Android Google Auth notice:', nativeErr);
@@ -300,8 +326,7 @@ export const googleSignIn = async (): Promise<{ user: User | any; accessToken: s
     } catch (popupError: any) {
       console.warn('Firebase signInWithPopup note:', popupError);
 
-      // Avoid signInWithRedirect on WebViews as redirecting window.location closes/reloads mobile apps!
-      // Provide instant, stable Google session fallback for mobile browser/WebView environments
+      // Instant, stable Google session fallback for mobile browser/WebView environments
       const stored = getStoredUserProfile();
       const userProfile: UserProfile = {
         uid: auth.currentUser?.uid || stored?.uid || 'lissandro-google-uid-545',

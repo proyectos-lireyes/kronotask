@@ -137,6 +137,9 @@ export async function sendPushNotification(title: string, options?: Notification
             title,
             body: options?.body || '',
             channelId: 'kronotask_alerts',
+            smallIcon: 'ic_stat_icon',
+            largeIcon: 'ic_launcher',
+            iconColor: '#2563eb',
             schedule: { at: new Date(Date.now() + 150) },
           },
         ],
@@ -457,6 +460,9 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
           title: `▶️ ¡Hora de Iniciar!: ${task.title}`,
           body,
           channelId: 'kronotask_alerts',
+          smallIcon: 'ic_stat_icon',
+          largeIcon: 'ic_launcher',
+          iconColor: '#2563eb',
           schedule: { at: new Date(startTime) },
         });
       }
@@ -471,6 +477,9 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
               title: `🚀 Recordatorio (Faltan ${rem.offsetMinutes}m): ${task.title}`,
               body,
               channelId: 'kronotask_alerts',
+              smallIcon: 'ic_stat_icon',
+              largeIcon: 'ic_launcher',
+              iconColor: '#2563eb',
               schedule: { at: new Date(remTime) },
             });
           }
@@ -484,6 +493,9 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
           title: `⚠️ Fecha Límite: ${task.title}`,
           body,
           channelId: 'kronotask_alerts',
+          smallIcon: 'ic_stat_icon',
+          largeIcon: 'ic_launcher',
+          iconColor: '#2563eb',
           schedule: { at: new Date(endTime) },
         });
       }
@@ -498,6 +510,9 @@ export async function scheduleTaskOSNotifications(tasks: TaskItem[]) {
               title: `⏰ Recordatorio Entrega (${rem.offsetMinutes}m): ${task.title}`,
               body,
               channelId: 'kronotask_alerts',
+              smallIcon: 'ic_stat_icon',
+              largeIcon: 'ic_launcher',
+              iconColor: '#2563eb',
               schedule: { at: new Date(remEnd) },
             });
           }
