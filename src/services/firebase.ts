@@ -160,14 +160,19 @@ export async function saveUserDataToCloud(
     uid = String(userKeyOrProfile || '');
   }
 
-  if (!uid && !email) return;
+  if (!uid && !email) {
+    throw new Error('No hay perfil de usuario activo para sincronizar.');
+  }
 
-  const payload = {
+  const rawPayload = {
     uid: uid || email,
     email: email || '',
     updatedAt: new Date().toISOString(),
     ...data,
   };
+
+  // Strip all undefined properties to prevent Firestore setDoc "invalid data / undefined field" errors
+  const payload = JSON.parse(JSON.stringify(rawPayload));
 
   const writePromises: Promise<any>[] = [];
 
@@ -178,14 +183,14 @@ export async function saveUserDataToCloud(
   }
 
   // 2. Secondary: Direct UID document key fallback
-  if (uid) {
+  if (uid && uid !== email) {
     writePromises.push(setDoc(doc(db, 'user_data', uid), payload, { merge: true }));
   }
 
   try {
     await Promise.all(writePromises);
-  } catch (e) {
-    console.warn('Error guardando copia de respaldo en la nube:', e);
+  } catch (e: any) {
+    console.error('Error guardando copia de respaldo en la nube:', e);
     throw e;
   }
 }
@@ -217,7 +222,7 @@ export async function fetchUserDataFromCloud(
   }
 
   // 2. Try reading from UID doc key fallback
-  if (uid) {
+  if (uid && uid !== email) {
     try {
       const snap = await getDoc(doc(db, 'user_data', uid));
       if (snap.exists()) {
