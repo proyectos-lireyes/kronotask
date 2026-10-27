@@ -96,6 +96,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [durationUnit, setDurationUnit] = useState<'minutes' | 'hours' | 'days' | 'weeks' | 'months' | 'years'>('hours');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [acceptedLocally, setAcceptedLocally] = useState<string[]>([]);
+  const [waitingDays, setWaitingDays] = useState<number>(2);
 
   // Recurrence
   const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
@@ -175,6 +176,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setReminders(task.reminders || []);
       setAttachments(task.attachments || []);
       setComments(task.comments || []);
+      setWaitingDays(task.waitingDays || 2);
     } else {
       const now = new Date();
       const inThreeDays = new Date(now.getTime() + 1000 * 60 * 60 * 72);
@@ -189,6 +191,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setStartDate(toDateTimeLocal(now));
       setEndDate(toDateTimeLocal(inThreeDays));
       setSelectedTags([]);
+      setWaitingDays(2);
       setRecurrenceEnabled(false);
       setRecurrenceInterval(1);
       setRecurrenceUnit('weeks');
@@ -258,9 +261,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!title.trim()) return;
 
     let waitingSince = task?.waitingSince;
-    if (status === 'waiting' && !waitingSince) {
-      waitingSince = new Date().toISOString();
-    } else if (status !== 'waiting') {
+    let frictionPoints = task?.frictionPoints || 0;
+    let finalEndMs = new Date(endDate).getTime();
+
+    if (status === 'waiting') {
+      if (!waitingSince) {
+        waitingSince = new Date().toISOString();
+      }
+      if (task?.status !== 'waiting') {
+        frictionPoints += 5;
+        const daysToAdd = Math.max(1, isNaN(waitingDays) ? 1 : Math.round(waitingDays));
+        finalEndMs += daysToAdd * 24 * 60 * 60 * 1000;
+      }
+    } else {
       waitingSince = null;
     }
 
@@ -271,10 +284,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       description: description.trim(),
       status,
       waitingSince,
+      waitingDays: status === 'waiting' ? Math.max(1, isNaN(waitingDays) ? 1 : Math.round(waitingDays)) : undefined,
+      frictionPoints,
       priority,
       type,
       startDate: new Date(startDate).toISOString(),
-      endDate: new Date(endDate).toISOString(),
+      endDate: new Date(finalEndMs).toISOString(),
       completedAt: status === 'done' ? (task?.completedAt || new Date().toISOString()) : null,
       tags: selectedTags,
       recurrence: recurrenceEnabled
@@ -625,6 +640,45 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       );
                     })}
                   </div>
+
+                  {status === 'waiting' && (
+                    <div className="mt-2.5 p-3 rounded-2xl bg-purple-50/80 border border-purple-200 text-xs animate-in fade-in duration-200">
+                      <div className="flex items-center gap-1.5 font-bold text-purple-900 mb-1.5">
+                        <Hourglass className="w-3.5 h-3.5 text-purple-600 animate-spin" />
+                        <span>Días en espera (se sumarán automáticamente a la fecha de entrega):</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {[1, 2, 3, 4, 7].map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setWaitingDays(d)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                              waitingDays === d
+                                ? 'bg-purple-600 text-white border-purple-600'
+                                : 'bg-white hover:bg-purple-100/60 text-slate-700 border-purple-200'
+                            }`}
+                          >
+                            +{d} {d === 1 ? 'día' : 'días'}
+                          </button>
+                        ))}
+                        <div className="flex items-center gap-1 ml-auto">
+                          <input
+                            type="number"
+                            min="1"
+                            max="90"
+                            value={waitingDays}
+                            onChange={(e) => setWaitingDays(parseInt(e.target.value, 10))}
+                            className="w-14 px-2 py-1 text-xs font-bold bg-white border border-purple-300 rounded-lg text-center"
+                          />
+                          <span className="text-[11px] text-purple-800 font-semibold">días</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-purple-700 mt-1.5 font-medium">
+                        Al guardar, se sumarán <strong>{Math.max(1, isNaN(waitingDays) ? 1 : waitingDays)} días</strong> a la fecha de entrega y sumará <strong>+5 pts</strong> en el historial de fricción.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Priority & Type Row with Custom Modals */}

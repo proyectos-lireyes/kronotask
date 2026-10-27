@@ -74,12 +74,14 @@ export interface TaskItem {
   description: string;
   status: TaskStatus;
   waitingSince?: string | null; // ISO string when entered 'waiting' status
+  waitingDays?: number; // Días asignados en espera que se sumaron a la fecha de fin
   startDate: string; // ISO string
   endDate: string; // ISO string (deadline)
   completedAt?: string | null;
   priority: string; // matches CustomPriorityDefinition.id or name
   type: string; // matches CustomTypeDefinition.id or name
   tags: string[];
+  frictionPoints?: number; // Historial acumulativo de fricción (+5 cada vez que entra a 'waiting')
   recurrence?: RecurrenceRule;
   attachments: TaskAttachment[];
   comments: TaskComment[];

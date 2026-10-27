@@ -1,7 +1,7 @@
 import React from 'react';
 import { TaskItem, CustomTag, Board } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
-import { detectTaskStatusMismatch } from '../utils/prioritySort';
+import { detectTaskStatusMismatch, calculateTaskUrgencyInfo, getQuadrantStyle } from '../utils/prioritySort';
 import {
   CheckCircle2,
   Flag,
@@ -38,6 +38,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   const isWaiting = task.status === 'waiting';
   const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
   const mismatch = detectTaskStatusMismatch(task, Date.now());
+  const urgencyInfo = calculateTaskUrgencyInfo(task, undefined, Date.now());
   const isBlack = !isDone && timeCalc.level === 'black';
 
   // Calculate 4-day waiting remaining time if applicable
@@ -87,36 +88,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
-  // El color de la tarjeta refleja directamente la cantidad de tiempo disponible para entrega
+  // El color de la tarjeta refleja directamente el cuadrante (1 al 9) de la matriz según su puntaje
   const getCardColorClass = () => {
     if (isDone) {
       return 'border-l-4 border-l-slate-400 border-slate-300 bg-slate-100/80 text-slate-600 opacity-70';
     }
-    if (isWaiting) {
-      return 'border-l-4 border-l-purple-500 border-purple-300 bg-purple-50/90 hover:bg-purple-100/90 text-slate-800 shadow-2xs';
-    }
-
-    switch (timeCalc.level) {
-      case 'black':
-        // Superó fecha límite / Vencida
-        return 'border-l-4 border-l-black border-stone-800 bg-stone-900 text-stone-100 hover:bg-stone-950 shadow-md ring-1 ring-stone-950/25';
-      case 'red':
-        // Crítico (< 10% tiempo restante)
-        return 'border-l-4 border-l-rose-600 border-rose-300 bg-rose-50/95 hover:bg-rose-100/95 text-slate-900 shadow-2xs';
-      case 'orange':
-        // Atención (10% - 24% tiempo restante)
-        return 'border-l-4 border-l-orange-500 border-orange-300 bg-orange-50/95 hover:bg-orange-100/95 text-slate-900 shadow-2xs';
-      case 'yellow':
-        // Medio (25% - 49% tiempo restante)
-        return 'border-l-4 border-l-yellow-500 border-yellow-300 bg-yellow-50/95 hover:bg-yellow-100/95 text-slate-900 shadow-2xs';
-      case 'blue':
-        // En curso (50% - 74% tiempo restante)
-        return 'border-l-4 border-l-sky-500 border-sky-300 bg-sky-50/90 hover:bg-sky-100/90 text-slate-900 shadow-2xs';
-      case 'green':
-      default:
-        // Holgado (> 75% tiempo restante)
-        return 'border-l-4 border-l-emerald-600 border-emerald-300 bg-emerald-50/90 hover:bg-emerald-100/90 text-slate-900 shadow-2xs';
-    }
+    const qStyle = getQuadrantStyle(urgencyInfo.quadrantNumber);
+    return `border-l-4 ${qStyle.borderLeft} ${qStyle.borderColor} ${qStyle.bgLight} ${qStyle.hoverBg} text-slate-900 shadow-2xs`;
   };
 
   return (
@@ -236,6 +214,32 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             <Flag className="w-2.5 h-2.5 text-slate-400" />
             <span className="truncate max-w-[55px]">{task.priority}</span>
           </span>
+
+          {/* 3D Quadrant & Score Pill */}
+          {!isDone && (
+            <span
+              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-black text-[10px] shrink-0 ${
+                urgencyInfo.quadrantNumber <= 3
+                  ? 'bg-rose-100/90 text-rose-800 border border-rose-300/80'
+                  : urgencyInfo.quadrantNumber <= 6
+                  ? 'bg-amber-100/90 text-amber-900 border border-amber-300/80'
+                  : 'bg-slate-100 text-slate-700 border border-slate-200'
+              }`}
+              title={`Clasificación Matriz 3x3: ${Number(urgencyInfo.score).toFixed(2)} pts (Cuadrante Q${urgencyInfo.quadrantNumber})${task.frictionPoints ? ` · Fricción acumulada: +${task.frictionPoints} pts` : ''}`}
+            >
+              Q{urgencyInfo.quadrantNumber} · {Number(urgencyInfo.score).toFixed(2)} pts
+            </span>
+          )}
+
+          {/* Friction Badge if task was blocked previously */}
+          {!isDone && !!task.frictionPoints && task.frictionPoints > 0 && (
+            <span
+              className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 shrink-0"
+              title={`Historial de Fricción: +${task.frictionPoints} pts acumulados por entrar a En Espera`}
+            >
+              🔒+{task.frictionPoints}
+            </span>
+          )}
 
           {/* Primary Tag (if any) */}
           {task.tags && task.tags.length > 0 && (

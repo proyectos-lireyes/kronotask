@@ -61,6 +61,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SemaforoFilterModal } from './components/SemaforoFilterModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
+import { WaitingDaysModal } from './components/WaitingDaysModal';
 import { checkGitHubRelease, checkAndCleanupOldApkOnStartup } from './services/updateService';
 import { ImportBoardAction } from './types';
 import {
@@ -120,7 +121,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return 'kanban';
+    return 'eisenhower';
   });
 
   // Persist active view & active board to localStorage
@@ -151,6 +152,7 @@ export default function App() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [isSemaforoModalOpen, setIsSemaforoModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [waitingModalTask, setWaitingModalTask] = useState<TaskItem | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -417,9 +419,15 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus) => {
+  const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus, waitingDays?: number) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+
+    // Si se pasa a 'waiting' y no se han indicado los días aún, abrimos el modal para indicarlos
+    if (newStatus === 'waiting' && task.status !== 'waiting' && waitingDays === undefined) {
+      setWaitingModalTask(task);
+      return;
+    }
 
     let extraTask: TaskItem | null = null;
     if (newStatus === 'done' && task.recurrence?.enabled) {
@@ -449,6 +457,20 @@ export default function App() {
     const updatedTasks = tasks.map((t) => {
       if (t.id === taskId) {
         let waitingSince = t.waitingSince;
+        let frictionPoints = t.frictionPoints || 0;
+        let endDate = t.endDate;
+        let currentWaitingDays = t.waitingDays;
+
+        // Historial de Fricción: cada vez que entra a 'waiting' se añaden 5 puntos permanentes
+        // y el tiempo en días se suma directamente a la fecha de fin de la tarea
+        if (newStatus === 'waiting' && t.status !== 'waiting') {
+          frictionPoints += 5;
+          const daysToAdd = Math.max(1, isNaN(waitingDays as number) ? 2 : (waitingDays as number));
+          currentWaitingDays = daysToAdd;
+          const currentEndMs = new Date(t.endDate).getTime();
+          endDate = new Date(currentEndMs + daysToAdd * 24 * 60 * 60 * 1000).toISOString();
+        }
+
         if (newStatus === 'waiting' && !waitingSince) {
           waitingSince = new Date().toISOString();
         } else if (newStatus !== 'waiting') {
@@ -459,6 +481,9 @@ export default function App() {
           ...t,
           status: newStatus,
           waitingSince,
+          waitingDays: currentWaitingDays,
+          endDate,
+          frictionPoints,
           completedAt: newStatus === 'done' ? new Date().toISOString() : null,
           updatedAt: new Date().toISOString(),
         };
@@ -832,39 +857,17 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 flex flex-col gap-3">
         {/* Navigation & Controls Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          {/* Desktop Views Switcher: Kanban, Tabla, Calendario, Gantt, Eisenhower, Historial */}
+          {/* Desktop Views Switcher: Eisenhower, Gantt, Tabla, Kanban, Calendario, Historial */}
           <div className="hidden md:flex items-center gap-1 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
             <button
               type="button"
-              onClick={() => setViewMode('kanban')}
+              onClick={() => setViewMode('eisenhower')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'kanban' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                viewMode === 'eisenhower' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Kanban</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'table' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>Tabla</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setViewMode('calendar')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'calendar' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <CalendarDays className="w-3.5 h-3.5" />
-              <span>Calendario</span>
+              <Grid2x2 className="w-3.5 h-3.5" />
+              <span>Eisenhower</span>
             </button>
 
             <button
@@ -880,13 +883,35 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setViewMode('eisenhower')}
+              onClick={() => setViewMode('table')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'eisenhower' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                viewMode === 'table' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <Grid2x2 className="w-3.5 h-3.5" />
-              <span>Eisenhower</span>
+              <List className="w-3.5 h-3.5" />
+              <span>Tabla</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'kanban' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Kanban</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('calendar')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'calendar' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>Calendario</span>
             </button>
 
             <button
@@ -1049,7 +1074,7 @@ export default function App() {
 
         {viewMode === 'eisenhower' && (
           <EisenhowerMatrixView
-            tasks={boardTasks}
+            tasks={filteredActiveTasks}
             allTags={tags}
             allBoards={boards}
             allPriorities={priorities}
@@ -1075,6 +1100,7 @@ export default function App() {
               const updated = tasks.map((t) => {
                 if (t.id !== taskId) return t;
                 let newPriority = t.priority;
+                let newStatus: TaskStatus = t.status;
                 let start = new Date(t.startDate).getTime();
                 let end = new Date(t.endDate).getTime();
                 let totalDuration = Math.max(1000 * 60 * 30, end - start);
@@ -1096,25 +1122,65 @@ export default function App() {
                     end = now + Math.max(1000 * 60 * 60 * 24, Math.floor(totalDuration * 0.7));
                   }
                 } else {
-                  const qNum = Number(targetQuadrant);
+                  const qNum = typeof targetQuadrant === 'string' && targetQuadrant.startsWith('q')
+                    ? parseInt(targetQuadrant.slice(1), 10)
+                    : Number(targetQuadrant);
                   if (qNum === 1) {
                     newPriority = 'critica';
-                    end = now + Math.max(1000 * 60 * 15, Math.floor(totalDuration * 0.2));
+                    start = now - 1000 * 60 * 60 * 24;
+                    end = now + 1000 * 60 * 30; // 98%+ transcurrido -> Q1 (136+ pts)
+                    if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 2) {
                     newPriority = 'alta';
-                    end = now + Math.max(1000 * 60 * 60 * 24, Math.floor(totalDuration * 0.7));
+                    start = now - 1000 * 60 * 60 * 20;
+                    end = now + 1000 * 60 * 60 * 2; // ~91% transcurrido -> Q2 (116-135 pts)
+                    if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 3) {
-                    newPriority = 'media';
-                    end = now + Math.max(1000 * 60 * 15, Math.floor(totalDuration * 0.2));
+                    newPriority = 'alta';
+                    start = now - 1000 * 60 * 60 * 15;
+                    end = now + 1000 * 60 * 60 * 5; // ~75% transcurrido -> Q3 (96-115 pts)
+                    if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 4) {
+                    newPriority = 'media';
+                    start = now - 1000 * 60 * 60 * 12;
+                    end = now + 1000 * 60 * 60 * 12; // ~50% transcurrido -> Q4 (76-95 pts)
+                    if (newStatus === 'todo') newStatus = 'in_progress';
+                  } else if (qNum === 5) {
+                    newPriority = 'media';
+                    start = now - 1000 * 60 * 60 * 8;
+                    end = now + 1000 * 60 * 60 * 16; // ~33% transcurrido -> Q5 (56-75 pts)
+                    if (newStatus === 'todo') newStatus = 'in_progress';
+                  } else if (qNum === 6) {
                     newPriority = 'baja';
-                    end = now + Math.max(1000 * 60 * 60 * 24, Math.floor(totalDuration * 0.7));
+                    start = now - 1000 * 60 * 60 * 1;
+                    end = now + 1000 * 60 * 60 * 23; // ~4% transcurrido -> Q6 (36-55 pts)
+                    if (newStatus === 'todo') newStatus = 'in_progress';
+                  } else if (qNum === 7) {
+                    // Zona Planificación: Listas para arrancar (26-35 pts)
+                    newPriority = 'media';
+                    start = now + 1000 * 60 * 60 * 1; // Inicia en 1h (approach > 67% -> 30 pts)
+                    end = now + 1000 * 60 * 60 * 48;
+                    newStatus = 'todo';
+                  } else if (qNum === 8) {
+                    // Zona Planificación: Acercándose al inicio (16-25 pts)
+                    newPriority = 'media';
+                    start = now + 1000 * 60 * 60 * 24 * 3; // Inicia en 3 días (approach ~ 50% -> 20 pts)
+                    end = now + 1000 * 60 * 60 * 24 * 7;
+                    newStatus = 'todo';
+                  } else if (qNum === 9) {
+                    // Zona Planificación: Tareas recién creadas (0-15 pts)
+                    newPriority = 'baja';
+                    start = now + 1000 * 60 * 60 * 24 * 7; // Inicia en 7 días (approach < 33% -> 10 pts)
+                    end = now + 1000 * 60 * 60 * 24 * 14;
+                    newStatus = 'todo';
                   }
                 }
 
                 return {
                   ...t,
+                  status: newStatus,
                   priority: newPriority,
+                  startDate: new Date(start).toISOString(),
                   endDate: new Date(end).toISOString(),
                   updatedAt: new Date().toISOString(),
                 };
@@ -1172,16 +1238,28 @@ export default function App() {
 
       {/* Mobile Pocket Bottom Navigation Bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
-        {/* Kanban */}
+        {/* Matriz Eisenhower */}
         <button
           type="button"
-          onClick={() => setViewMode('kanban')}
+          onClick={() => setViewMode('eisenhower')}
           className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
-            viewMode === 'kanban' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+            viewMode === 'eisenhower' ? 'text-indigo-600 font-black bg-indigo-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <LayoutGrid className="w-4 h-4" />
-          <span>Kanban</span>
+          <Grid2x2 className="w-4 h-4" />
+          <span>Matriz</span>
+        </button>
+
+        {/* Gantt */}
+        <button
+          type="button"
+          onClick={() => setViewMode('gantt')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
+            viewMode === 'gantt' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>Gantt</span>
         </button>
 
         {/* Tabla */}
@@ -1196,16 +1274,16 @@ export default function App() {
           <span>Tabla</span>
         </button>
 
-        {/* Matriz Eisenhower */}
+        {/* Kanban */}
         <button
           type="button"
-          onClick={() => setViewMode('eisenhower')}
+          onClick={() => setViewMode('kanban')}
           className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
-            viewMode === 'eisenhower' ? 'text-indigo-600 font-black bg-indigo-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+            viewMode === 'kanban' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <Grid2x2 className="w-4 h-4" />
-          <span>Matriz</span>
+          <LayoutGrid className="w-4 h-4" />
+          <span>Kanban</span>
         </button>
 
         {/* Calendario */}
@@ -1218,18 +1296,6 @@ export default function App() {
         >
           <CalendarDays className="w-4 h-4" />
           <span>Calendario</span>
-        </button>
-
-        {/* Gantt */}
-        <button
-          type="button"
-          onClick={() => setViewMode('gantt')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
-            viewMode === 'gantt' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Gantt</span>
         </button>
       </nav>
 
@@ -1355,6 +1421,20 @@ export default function App() {
         isDestructive={confirmModal.isDestructive}
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Waiting Days Modal (agrega días a fecha de fin y registra fricción) */}
+      <WaitingDaysModal
+        isOpen={Boolean(waitingModalTask)}
+        task={waitingModalTask}
+        onClose={() => setWaitingModalTask(null)}
+        onConfirm={(days) => {
+          if (waitingModalTask) {
+            const taskId = waitingModalTask.id;
+            setWaitingModalTask(null);
+            handleTaskStatusChange(taskId, 'waiting', days);
+          }
+        }}
       />
     </div>
   );

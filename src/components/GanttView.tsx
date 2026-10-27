@@ -24,7 +24,8 @@ export const GanttView: React.FC<GanttViewProps> = ({
   isMasterView,
   onSelectTask,
 }) => {
-  const [zoomDays, setZoomDays] = useState<number>(14); // 7, 14, 30 days
+  const [timeFilter, setTimeFilter] = useState<'7' | '14' | '28' | 'all'>('14');
+  const [zoomDays, setZoomDays] = useState<number>(14); // timeline width in days
   const [startDateOffset, setStartDateOffset] = useState<number>(-2); // days before today to start timeline
   const [isSortPickerOpen, setIsSortPickerOpen] = useState(false);
   const [ganttSortMode, setGanttSortMode] = useState<GanttSortMode>(() => {
@@ -62,6 +63,17 @@ export const GanttView: React.FC<GanttViewProps> = ({
       return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
     });
   }, [tasks, allPriorities, ganttSortMode]);
+
+  // Filter tasks whose start date is within the selected time window (1 week, 2 weeks, 1 month, or Todas)
+  const visibleGanttTasks = useMemo(() => {
+    if (timeFilter === 'all') return sortedGanttTasks;
+    const days = Number(timeFilter);
+    const limitMs = Date.now() + days * 24 * 60 * 60 * 1000;
+    return sortedGanttTasks.filter((t) => {
+      const sMs = new Date(t.startDate).getTime();
+      return isNaN(sMs) || sMs <= limitMs;
+    });
+  }, [sortedGanttTasks, timeFilter]);
 
   const ganttSortOptions: PickerOption[] = [
     {
@@ -177,19 +189,28 @@ export const GanttView: React.FC<GanttViewProps> = ({
             </button>
           </div>
 
-          {/* Zoom Selector */}
+          {/* Time Window Filter: 1 Sem, 2 Sem, 1 Mes, Todas */}
           <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 text-xs font-semibold">
-            {[7, 14, 28].map((days) => (
+            {[
+              { id: '7' as const, label: '1 Sem', days: 7 },
+              { id: '14' as const, label: '2 Sem', days: 14 },
+              { id: '28' as const, label: '1 Mes', days: 28 },
+              { id: 'all' as const, label: 'Todas', days: 35 },
+            ].map((opt) => (
               <button
-                key={days}
-                onClick={() => setZoomDays(days)}
+                key={opt.id}
+                onClick={() => {
+                  setTimeFilter(opt.id);
+                  setZoomDays(opt.days);
+                }}
                 className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                  zoomDays === days
-                    ? 'bg-blue-600 text-white shadow-2xs'
+                  timeFilter === opt.id
+                    ? 'bg-blue-600 text-white shadow-2xs font-bold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
+                title={opt.id === 'all' ? 'Mostrar todas las tareas' : `Filtrar tareas que inicien dentro de ${opt.label}`}
               >
-                {days === 7 ? '1 Sem' : days === 14 ? '2 Sem' : '1 Mes'}
+                {opt.label}
               </button>
             ))}
           </div>
@@ -243,12 +264,12 @@ export const GanttView: React.FC<GanttViewProps> = ({
 
           {/* Task Rows */}
           <div className="divide-y divide-slate-100">
-            {tasks.length === 0 ? (
+            {visibleGanttTasks.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400">
-                No hay tareas para graficar en este periodo.
+                No hay tareas que inicien dentro del periodo seleccionado ({timeFilter === 'all' ? 'Todas' : timeFilter === '7' ? '1 semana' : timeFilter === '14' ? '2 semanas' : '1 mes'}).
               </div>
             ) : (
-              sortedGanttTasks.map((task) => {
+              visibleGanttTasks.map((task) => {
                 const isDone = task.status === 'done';
                 const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
                 const leftPos = getPositionPercent(task.startDate);
