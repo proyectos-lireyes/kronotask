@@ -480,17 +480,26 @@ export function sortTasksByDeadlineAndPriority(
  */
 export function sortTasksByPriorityAndUrgency(
   tasks: TaskItem[],
-  allPriorities?: CustomPriorityDefinition[]
+  allPriorities?: CustomPriorityDefinition[],
+  now: number = Date.now()
 ): TaskItem[] {
-  return [...tasks].sort((a, b) => {
-    const scoreA = getTaskPriorityScore(a, allPriorities);
-    const scoreB = getTaskPriorityScore(b, allPriorities);
-    if (scoreA !== scoreB) {
-      return scoreB - scoreA;
+  const mapped = tasks.map((t) => ({
+    task: t,
+    info: calculateTaskUrgencyInfo(t, allPriorities, now),
+  }));
+
+  mapped.sort((a, b) => {
+    // 1. Mayor puntuación primero (score de más a menos)
+    if (b.info.score !== a.info.score) {
+      return b.info.score - a.info.score;
     }
-    const endA = new Date(a.endDate).getTime();
-    const endB = new Date(b.endDate).getTime();
+    // 2. Desempate: Fecha fin más cercana
+    const endA = new Date(a.task.endDate).getTime();
+    const endB = new Date(b.task.endDate).getTime();
     if (endA !== endB) return endA - endB;
-    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+    // 3. Desempate: Fecha inicio más cercana
+    return new Date(a.task.startDate).getTime() - new Date(b.task.startDate).getTime();
   });
+
+  return mapped.map((item) => item.task);
 }
