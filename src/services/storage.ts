@@ -5,6 +5,8 @@ import {
   CustomTypeDefinition,
   LightThemeConfig,
   TaskItem,
+  QuadrantConfig,
+  DEFAULT_QUADRANT_CONFIG,
 } from '../types';
 
 const STORAGE_TASKS_KEY = 'kronotask_tasks_v5';
@@ -268,3 +270,32 @@ export function saveTheme(theme: LightThemeConfig) {
     console.error(e);
   }
 }
+
+const STORAGE_QUADRANT_CONFIG_KEY = 'kronotask_quadrant_config_v5';
+
+export function loadQuadrantConfig(): QuadrantConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_QUADRANT_CONFIG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.q1Days === 'number') {
+        return {
+          ...DEFAULT_QUADRANT_CONFIG,
+          ...parsed,
+        };
+      }
+    }
+  } catch (e) {
+    console.error('Error loading quadrant config:', e);
+  }
+  return DEFAULT_QUADRANT_CONFIG;
+}
+
+export function saveQuadrantConfig(config: QuadrantConfig) {
+  try {
+    localStorage.setItem(STORAGE_QUADRANT_CONFIG_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.error('Error saving quadrant config:', e);
+  }
+}
+

@@ -15,6 +15,7 @@ import {
   Board,
   CustomTypeDefinition,
   CustomPriorityDefinition,
+  QuadrantConfig,
 } from './types';
 import {
   loadTasks,
@@ -31,6 +32,8 @@ import {
   saveTheme,
   loadAcceptedCollisions,
   saveAcceptedCollisions,
+  loadQuadrantConfig,
+  saveQuadrantConfig,
 } from './services/storage';
 import { initAuth, googleSignIn, logout, saveUserDataToCloud, fetchUserDataFromCloud, getStoredUserProfile } from './services/firebase';
 import { getBiometricRecord, isVaultLocked, setVaultLocked } from './services/biometrics';
@@ -44,6 +47,7 @@ import {
 import { calculateNextOccurrence } from './utils/recurrence';
 import { calculateTimeLevel } from './utils/timeColor';
 import { detectCollisions } from './utils/collisionUtils';
+import { getNextSundayEnd } from './utils/prioritySort';
 import { Header } from './components/Header';
 import { KanbanBoard } from './components/KanbanBoard';
 import { GanttView } from './components/GanttView';
@@ -52,6 +56,7 @@ import { HistoryView } from './components/HistoryView';
 import { TaskListView } from './components/TaskListView';
 import { GlobalDashboardView } from './components/GlobalDashboardView';
 import { EisenhowerMatrixView } from './components/EisenhowerMatrixView';
+import { QuadrantSettingsModal } from './components/QuadrantSettingsModal';
 import { BoardSelectModal } from './components/BoardSelectModal';
 import { TaskModal } from './components/TaskModal';
 import { ReportsModal } from './components/ReportsModal';
@@ -149,6 +154,8 @@ export default function App() {
   const [initialBoardForNewTask, setInitialBoardForNewTask] = useState<string>('');
   const [isReportsOpen, setIsReportsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(() => loadQuadrantConfig());
+  const [isQuadrantSettingsModalOpen, setIsQuadrantSettingsModalOpen] = useState(false);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [isSemaforoModalOpen, setIsSemaforoModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -1078,6 +1085,7 @@ export default function App() {
             allTags={tags}
             allBoards={boards}
             allPriorities={priorities}
+            quadrantConfig={quadrantConfig}
             isMasterView={isMasterBoard}
             searchQuery={searchQuery}
             filterPriority={filterPriority}
@@ -1095,6 +1103,7 @@ export default function App() {
               setInitialBoardForNewTask(targetBoard);
               setIsTaskModalOpen(true);
             }}
+            onOpenQuadrantSettings={() => setIsQuadrantSettingsModalOpen(true)}
             onReclassifyTask={(taskId, targetQuadrant) => {
               const now = Date.now();
               const updated = tasks.map((t) => {
@@ -1125,53 +1134,53 @@ export default function App() {
                   const qNum = typeof targetQuadrant === 'string' && targetQuadrant.startsWith('q')
                     ? parseInt(targetQuadrant.slice(1), 10)
                     : Number(targetQuadrant);
+                  const nextSunEnd = getNextSundayEnd(now);
+                  const msDay = 1000 * 60 * 60 * 24;
+
                   if (qNum === 1) {
                     newPriority = 'critica';
-                    start = now - 1000 * 60 * 60 * 24;
-                    end = now + 1000 * 60 * 60 * 24 * 2; // < 4 días para la entrega -> Q1 (136+ pts)
+                    start = now - msDay;
+                    end = now + msDay * 2; // < 4 días
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 2) {
                     newPriority = 'alta';
-                    start = now - 1000 * 60 * 60 * 24;
-                    end = now + 1000 * 60 * 60 * 24 * 5; // < 7 días para la entrega -> Q2 (116-135 pts)
+                    start = now - msDay;
+                    end = nextSunEnd - 1000 * 60 * 60 * 12; // Termina antes del siguiente domingo -> Q2
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 3) {
                     newPriority = 'alta';
-                    start = now - 1000 * 60 * 60 * 24;
-                    end = now + 1000 * 60 * 60 * 24 * 10; // < 15 días para la entrega -> Q3 (96-115 pts)
+                    start = now - msDay;
+                    end = nextSunEnd + msDay * 7; // Termina en 15 días post-domingo -> Q3
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 4) {
                     newPriority = 'media';
-                    start = now - 1000 * 60 * 60 * 24;
-                    end = now + 1000 * 60 * 60 * 24 * 18; // < 21 días para la entrega -> Q4 (76-95 pts)
+                    start = now - msDay;
+                    end = nextSunEnd + msDay * 20; // Termina en 15-30d post-domingo -> Q4
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 5) {
                     newPriority = 'media';
-                    start = now - 1000 * 60 * 60 * 24;
-                    end = now + 1000 * 60 * 60 * 24 * 25; // < 30 días para la entrega -> Q5 (56-75 pts)
+                    start = now - msDay;
+                    end = nextSunEnd + msDay * 40; // Termina +30d post-domingo -> Q5
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 6) {
                     newPriority = 'baja';
-                    start = now - 1000 * 60 * 60 * 24;
-                    end = now + 1000 * 60 * 60 * 24 * 40; // > 30 días para la entrega -> Q6 (36-55 pts)
-                    if (newStatus === 'todo') newStatus = 'in_progress';
+                    start = nextSunEnd - msDay * 2; // Inicia antes del siguiente domingo -> Q6
+                    end = nextSunEnd + msDay * 10;
+                    newStatus = 'todo';
                   } else if (qNum === 7) {
-                    // Zona Planificación: Arranque Inminente (< 15 días para inicio)
                     newPriority = 'media';
-                    start = now + 1000 * 60 * 60 * 24 * 5; // Inicia en 5 días (< 15d) -> Q7 (26-35 pts)
-                    end = now + 1000 * 60 * 60 * 24 * 35;
+                    start = nextSunEnd + msDay * 5; // Inicia hasta 15d post-domingo -> Q7
+                    end = nextSunEnd + msDay * 25;
                     newStatus = 'todo';
                   } else if (qNum === 8) {
-                    // Zona Planificación: En Cola (15 a 30 días para inicio)
                     newPriority = 'media';
-                    start = now + 1000 * 60 * 60 * 24 * 20; // Inicia en 20 días (15-30d) -> Q8 (16-25 pts)
-                    end = now + 1000 * 60 * 60 * 24 * 50;
+                    start = nextSunEnd + msDay * 20; // Inicia en 15 a 30d post-domingo -> Q8
+                    end = nextSunEnd + msDay * 50;
                     newStatus = 'todo';
                   } else if (qNum === 9) {
-                    // Zona Planificación: Lejana (+30 días para inicio)
                     newPriority = 'baja';
-                    start = now + 1000 * 60 * 60 * 24 * 40; // Inicia en 40 días (+30d) -> Q9 (0-15 pts)
-                    end = now + 1000 * 60 * 60 * 24 * 70;
+                    start = nextSunEnd + msDay * 40; // Inicia +30d post-domingo -> Q9
+                    end = nextSunEnd + msDay * 80;
                     newStatus = 'todo';
                   }
                 }
@@ -1421,6 +1430,17 @@ export default function App() {
         isDestructive={confirmModal.isDestructive}
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Quadrant Settings Modal (Ajuste de días Q1-Q9) */}
+      <QuadrantSettingsModal
+        isOpen={isQuadrantSettingsModalOpen}
+        config={quadrantConfig}
+        onClose={() => setIsQuadrantSettingsModalOpen(false)}
+        onSave={(newCfg) => {
+          setQuadrantConfig(newCfg);
+          saveQuadrantConfig(newCfg);
+        }}
       />
 
       {/* Waiting Days Modal (agrega días a fecha de fin y registra fricción) */}

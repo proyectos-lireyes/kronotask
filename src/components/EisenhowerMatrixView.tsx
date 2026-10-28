@@ -1,5 +1,5 @@
 import React from 'react';
-import { TaskItem, CustomTag, Board, TaskStatus, CustomPriorityDefinition } from '../types';
+import { TaskItem, CustomTag, Board, TaskStatus, CustomPriorityDefinition, QuadrantConfig, DEFAULT_QUADRANT_CONFIG } from '../types';
 import { TaskCard } from './TaskCard';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { getTaskPriorityScore, sortTasksByPriorityAndUrgency, calculateTaskUrgencyInfo } from '../utils/prioritySort';
@@ -14,8 +14,7 @@ import {
   Archive,
   Trash2,
   Plus,
-  ArrowUpDown,
-  Sparkles,
+  Settings2,
 } from 'lucide-react';
 
 interface EisenhowerMatrixViewProps {
@@ -23,11 +22,13 @@ interface EisenhowerMatrixViewProps {
   allTags: CustomTag[];
   allBoards?: Board[];
   allPriorities?: CustomPriorityDefinition[];
+  quadrantConfig?: QuadrantConfig;
   isMasterView?: boolean;
   onSelectTask: (task: TaskItem) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
   onAddTaskToQuadrant: (quadrant: number) => void;
   onReclassifyTask?: (taskId: string, targetCellId: string) => void;
+  onOpenQuadrantSettings?: () => void;
   searchQuery?: string;
   filterPriority?: string;
   filterType?: string;
@@ -37,7 +38,7 @@ interface EisenhowerMatrixViewProps {
 export interface Quadrant3x3Definition {
   id: string; // 'q1', 'q2', ...
   quadrantNumber: number; // 1 to 9
-  scoreRange: string; // '273 - 306 pts', etc.
+  scoreRange: string;
   pLevel: 'high' | 'medium' | 'low';
   uLevel: 'high' | 'medium' | 'low';
   rowTitle: string;
@@ -53,175 +54,188 @@ export interface Quadrant3x3Definition {
   badgeText: string;
 }
 
-export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
-  // Fila 1: Urgencia Extrema & Corto Plazo (Q1, Q2, Q3)
-  {
-    id: 'q1',
-    quadrantNumber: 1,
-    scoreRange: '136+ pts',
-    pLevel: 'high',
-    uLevel: 'high',
-    rowTitle: 'Fila 1: Crisis & Alta Urgencia',
-    colTitle: 'Columna 1: Urgencia Extrema',
-    title: 'Q1: Entrega en < 4 días & Vencidas',
-    action: 'Atender Ahora Mismo',
-    subtitle: 'Menos de 4 días para la fecha de entrega o tareas vencidas',
-    icon: Flame,
-    accentColor: 'text-rose-600',
-    borderColor: 'border-rose-400',
-    bgLight: 'bg-rose-50/70',
-    badgeBg: 'bg-rose-600',
-    badgeText: 'text-white',
-  },
-  {
-    id: 'q2',
-    quadrantNumber: 2,
-    scoreRange: '116 - 135 pts',
-    pLevel: 'high',
-    uLevel: 'medium',
-    rowTitle: 'Fila 1: Crisis & Alta Urgencia',
-    colTitle: 'Columna 2: Inminencia',
-    title: 'Q2: Entrega en < 7 días',
-    action: 'Completar Esta Semana',
-    subtitle: 'Faltan entre 4 y 7 días para la fecha de entrega',
-    icon: Zap,
-    accentColor: 'text-amber-600',
-    borderColor: 'border-amber-400',
-    bgLight: 'bg-amber-50/70',
-    badgeBg: 'bg-amber-600',
-    badgeText: 'text-white',
-  },
-  {
-    id: 'q3',
-    quadrantNumber: 3,
-    scoreRange: '96 - 115 pts',
-    pLevel: 'high',
-    uLevel: 'low',
-    rowTitle: 'Fila 1: Crisis & Alta Urgencia',
-    colTitle: 'Columna 3: Recta Final',
-    title: 'Q3: Entrega en < 15 días',
-    action: 'Destrabar y Avanzar',
-    subtitle: 'Faltan entre 7 y 15 días para la fecha de entrega',
-    icon: CalendarCheck,
-    accentColor: 'text-blue-600',
-    borderColor: 'border-blue-300',
-    bgLight: 'bg-blue-50/60',
-    badgeBg: 'bg-blue-600',
-    badgeText: 'text-white',
-  },
+export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG): Quadrant3x3Definition[] {
+  const q1Days = config.q1Days || 4;
+  const q2EndText = config.q2UseNextSunday ? 'Sig. Domingo' : `${config.q2CustomDays || 7}d`;
+  const q2EndFullText = config.q2UseNextSunday
+    ? 'el Siguiente Domingo'
+    : `${config.q2CustomDays || 7} días`;
 
-  // Fila 2: Zona de Ejecución Regular & Holgada (Q4, Q5, Q6)
-  {
-    id: 'q4',
-    quadrantNumber: 4,
-    scoreRange: '76 - 95 pts',
-    pLevel: 'medium',
-    uLevel: 'high',
-    rowTitle: 'Fila 2: Zona de Ejecución',
-    colTitle: 'Columna 1: Consumo Alto',
-    title: 'Q4: Entrega en < 21 días',
-    action: 'Avanzar sin Demoras',
-    subtitle: 'Faltan entre 15 y 21 días para la fecha de entrega',
-    icon: Clock,
-    accentColor: 'text-orange-600',
-    borderColor: 'border-orange-300',
-    bgLight: 'bg-orange-50/60',
-    badgeBg: 'bg-orange-500',
-    badgeText: 'text-white',
-  },
-  {
-    id: 'q5',
-    quadrantNumber: 5,
-    scoreRange: '56 - 75 pts',
-    pLevel: 'medium',
-    uLevel: 'medium',
-    rowTitle: 'Fila 2: Zona de Ejecución',
-    colTitle: 'Columna 2: Núcleo Activo',
-    title: 'Q5: Entrega en < 30 días',
-    action: 'Mantener Ritmo Constante',
-    subtitle: 'Faltan entre 21 y 30 días para la fecha de entrega',
-    icon: ArrowRight,
-    accentColor: 'text-yellow-800',
-    borderColor: 'border-yellow-300',
-    bgLight: 'bg-yellow-50/60',
-    badgeBg: 'bg-yellow-500',
-    badgeText: 'text-white',
-  },
-  {
-    id: 'q6',
-    quadrantNumber: 6,
-    scoreRange: '36 - 55 pts',
-    pLevel: 'medium',
-    uLevel: 'low',
-    rowTitle: 'Fila 2: Zona de Ejecución',
-    colTitle: 'Columna 3: Recién Iniciada',
-    title: 'Q6: Ejecución Holgada (+30 días)',
-    action: 'Puerta de Entrada',
-    subtitle: 'Tareas activas con más de 1 mes (+30 días) para la entrega',
-    icon: Users,
-    accentColor: 'text-sky-600',
-    borderColor: 'border-sky-300',
-    bgLight: 'bg-sky-50/50',
-    badgeBg: 'bg-sky-600',
-    badgeText: 'text-white',
-  },
+  const q6EndText = config.q6UseNextSunday ? 'Sig. Domingo' : `${config.q6CustomDays || 7}d`;
+  const q6EndFullText = config.q6UseNextSunday
+    ? 'el Siguiente Domingo'
+    : `${config.q6CustomDays || 7} días`;
 
-  // Fila 3: Zona de Planificación (Antes de la fecha de inicio: Q7, Q8, Q9)
-  {
-    id: 'q7',
-    quadrantNumber: 7,
-    scoreRange: '26 - 35 pts',
-    pLevel: 'low',
-    uLevel: 'high',
-    rowTitle: 'Fila 3: Zona de Planificación',
-    colTitle: 'Columna 1: Arranque Inminente',
-    title: 'Q7: Arranque Inminente (< 15 días)',
-    action: 'Preparar para Iniciar',
-    subtitle: 'Faltan menos de 15 días para la fecha de inicio',
-    icon: AlertTriangle,
-    accentColor: 'text-stone-700',
-    borderColor: 'border-stone-300',
-    bgLight: 'bg-stone-100/60',
-    badgeBg: 'bg-stone-700',
-    badgeText: 'text-white',
-  },
-  {
-    id: 'q8',
-    quadrantNumber: 8,
-    scoreRange: '16 - 25 pts',
-    pLevel: 'low',
-    uLevel: 'medium',
-    rowTitle: 'Fila 3: Zona de Planificación',
-    colTitle: 'Columna 2: En Cola',
-    title: 'Q8: En Cola (15 a 30 días)',
-    action: 'Revisar Requisitos',
-    subtitle: 'Faltan entre 15 y 30 días para la fecha de inicio',
-    icon: Archive,
-    accentColor: 'text-slate-600',
-    borderColor: 'border-slate-300',
-    bgLight: 'bg-slate-50/70',
-    badgeBg: 'bg-slate-600',
-    badgeText: 'text-white',
-  },
-  {
-    id: 'q9',
-    quadrantNumber: 9,
-    scoreRange: '0 - 15 pts',
-    pLevel: 'low',
-    uLevel: 'low',
-    rowTitle: 'Fila 3: Zona de Planificación',
-    colTitle: 'Columna 3: Planificación Inicial',
-    title: 'Q9: Planificación Lejana (+30 días)',
-    action: 'Agendar / Definir',
-    subtitle: 'Falta más de 1 mes (+30 días) para la fecha de inicio',
-    icon: Trash2,
-    accentColor: 'text-slate-500',
-    borderColor: 'border-slate-200',
-    bgLight: 'bg-slate-50/40',
-    badgeBg: 'bg-slate-400',
-    badgeText: 'text-white',
-  },
-];
+  return [
+    // Fila 1: Urgencia Extrema & Corto Plazo (Q1, Q2, Q3)
+    {
+      id: 'q1',
+      quadrantNumber: 1,
+      scoreRange: `< ${q1Days}d / Vencidas`,
+      pLevel: 'high',
+      uLevel: 'high',
+      rowTitle: 'Fila 1: Crisis & Alta Urgencia',
+      colTitle: 'Columna 1: Urgencia Extrema',
+      title: `Q1: Entrega < ${q1Days}d / Vencidas`,
+      action: 'Atender Ahora Mismo',
+      subtitle: `Vencidas o menos de ${q1Days} días para la entrega`,
+      icon: Flame,
+      accentColor: 'text-rose-600',
+      borderColor: 'border-rose-400',
+      bgLight: 'bg-rose-50/70',
+      badgeBg: 'bg-rose-600',
+      badgeText: 'text-white',
+    },
+    {
+      id: 'q2',
+      quadrantNumber: 2,
+      scoreRange: `${q1Days}d a ${q2EndText}`,
+      pLevel: 'high',
+      uLevel: 'medium',
+      rowTitle: 'Fila 1: Crisis & Alta Urgencia',
+      colTitle: 'Columna 2: Inminencia',
+      title: 'Q2: Termina Esta Semana',
+      action: 'Completar Esta Semana',
+      subtitle: `Entre ${q1Days} días y ${q2EndFullText}`,
+      icon: Zap,
+      accentColor: 'text-amber-600',
+      borderColor: 'border-amber-400',
+      bgLight: 'bg-amber-50/70',
+      badgeBg: 'bg-amber-600',
+      badgeText: 'text-white',
+    },
+    {
+      id: 'q3',
+      quadrantNumber: 3,
+      scoreRange: `${q2EndText} a ${config.q3DaysPostSunday || 15}d`,
+      pLevel: 'high',
+      uLevel: 'low',
+      rowTitle: 'Fila 1: Crisis & Alta Urgencia',
+      colTitle: 'Columna 3: Recta Final',
+      title: `Q3: Termina en ${config.q3DaysPostSunday || 15}d`,
+      action: 'Destrabar y Avanzar',
+      subtitle: `Entre ${q2EndFullText} y ${config.q3DaysPostSunday || 15} días post-domingo`,
+      icon: CalendarCheck,
+      accentColor: 'text-blue-600',
+      borderColor: 'border-blue-300',
+      bgLight: 'bg-blue-50/60',
+      badgeBg: 'bg-blue-600',
+      badgeText: 'text-white',
+    },
+
+    // Fila 2: Zona de Ejecución Regular & Holgada (Q4, Q5, Q6)
+    {
+      id: 'q4',
+      quadrantNumber: 4,
+      scoreRange: `${config.q3DaysPostSunday || 15}d a ${config.q4DaysPostSunday || 30}d`,
+      pLevel: 'medium',
+      uLevel: 'high',
+      rowTitle: 'Fila 2: Zona de Ejecución',
+      colTitle: 'Columna 1: Consumo Alto',
+      title: `Q4: Termina en ${config.q3DaysPostSunday || 15}d a ${config.q4DaysPostSunday || 30}d`,
+      action: 'Avanzar sin Demoras',
+      subtitle: `Entre ${config.q3DaysPostSunday || 15}d y ${config.q4DaysPostSunday || 30}d post-domingo`,
+      icon: Clock,
+      accentColor: 'text-orange-600',
+      borderColor: 'border-orange-300',
+      bgLight: 'bg-orange-50/60',
+      badgeBg: 'bg-orange-500',
+      badgeText: 'text-white',
+    },
+    {
+      id: 'q5',
+      quadrantNumber: 5,
+      scoreRange: `> ${config.q4DaysPostSunday || 30}d`,
+      pLevel: 'medium',
+      uLevel: 'medium',
+      rowTitle: 'Fila 2: Zona de Ejecución',
+      colTitle: 'Columna 2: Núcleo Activo',
+      title: `Q5: Termina en +${config.q4DaysPostSunday || 30}d`,
+      action: 'Mantener Ritmo Constante',
+      subtitle: `Más de ${config.q4DaysPostSunday || 30} días post-domingo`,
+      icon: ArrowRight,
+      accentColor: 'text-yellow-800',
+      borderColor: 'border-yellow-300',
+      bgLight: 'bg-yellow-50/60',
+      badgeBg: 'bg-yellow-500',
+      badgeText: 'text-white',
+    },
+    {
+      id: 'q6',
+      quadrantNumber: 6,
+      scoreRange: `< ${q6EndText}`,
+      pLevel: 'medium',
+      uLevel: 'low',
+      rowTitle: 'Fila 2: Zona de Ejecución',
+      colTitle: 'Columna 3: Recién Iniciada',
+      title: 'Q6: Inicia Esta Semana (Pre-Q2)',
+      action: 'Puerta de Entrada',
+      subtitle: `Inicia antes de ${q6EndFullText}`,
+      icon: Users,
+      accentColor: 'text-sky-600',
+      borderColor: 'border-sky-300',
+      bgLight: 'bg-sky-50/50',
+      badgeBg: 'bg-sky-600',
+      badgeText: 'text-white',
+    },
+
+    // Fila 3: Zona de Planificación (Antes de la fecha de inicio: Q7, Q8, Q9)
+    {
+      id: 'q7',
+      quadrantNumber: 7,
+      scoreRange: `${q6EndText} a ${config.q7DaysPostSunday || 15}d`,
+      pLevel: 'low',
+      uLevel: 'high',
+      rowTitle: 'Fila 3: Zona de Planificación',
+      colTitle: 'Columna 1: Arranque Inminente',
+      title: `Q7: Inicia en ${config.q7DaysPostSunday || 15}d`,
+      action: 'Preparar para Iniciar',
+      subtitle: `Inicia entre ${q6EndFullText} y ${config.q7DaysPostSunday || 15} días post-domingo`,
+      icon: AlertTriangle,
+      accentColor: 'text-stone-700',
+      borderColor: 'border-stone-300',
+      bgLight: 'bg-stone-100/60',
+      badgeBg: 'bg-stone-700',
+      badgeText: 'text-white',
+    },
+    {
+      id: 'q8',
+      quadrantNumber: 8,
+      scoreRange: `${config.q7DaysPostSunday || 15}d a ${config.q8DaysPostSunday || 30}d`,
+      pLevel: 'low',
+      uLevel: 'medium',
+      rowTitle: 'Fila 3: Zona de Planificación',
+      colTitle: 'Columna 2: En Cola',
+      title: `Q8: Inicia en ${config.q7DaysPostSunday || 15}d a ${config.q8DaysPostSunday || 30}d`,
+      action: 'Revisar Requisitos',
+      subtitle: `Inicia entre ${config.q7DaysPostSunday || 15}d y ${config.q8DaysPostSunday || 30}d post-domingo`,
+      icon: Archive,
+      accentColor: 'text-slate-600',
+      borderColor: 'border-slate-300',
+      bgLight: 'bg-slate-50/70',
+      badgeBg: 'bg-slate-600',
+      badgeText: 'text-white',
+    },
+    {
+      id: 'q9',
+      quadrantNumber: 9,
+      scoreRange: `> ${config.q8DaysPostSunday || 30}d`,
+      pLevel: 'low',
+      uLevel: 'low',
+      rowTitle: 'Fila 3: Zona de Planificación',
+      colTitle: 'Columna 3: Planificación Inicial',
+      title: `Q9: Inicia en +${config.q8DaysPostSunday || 30}d`,
+      action: 'Agendar / Definir',
+      subtitle: `Inicia a más de ${config.q8DaysPostSunday || 30} días post-domingo`,
+      icon: Trash2,
+      accentColor: 'text-slate-500',
+      borderColor: 'border-slate-200',
+      bgLight: 'bg-slate-50/40',
+      badgeBg: 'bg-slate-400',
+      badgeText: 'text-white',
+    },
+  ];
+}
 
 export interface RelativePriorityInfo {
   percentElapsed: number;
@@ -234,9 +248,10 @@ export interface RelativePriorityInfo {
 
 export function getRelativePriorityInfo(
   task: TaskItem,
-  allPriorities?: CustomPriorityDefinition[]
+  allPriorities?: CustomPriorityDefinition[],
+  config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
 ): RelativePriorityInfo {
-  return calculateTaskUrgencyInfo(task, allPriorities);
+  return calculateTaskUrgencyInfo(task, allPriorities, Date.now(), config);
 }
 
 export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
@@ -244,16 +259,20 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
   allTags,
   allBoards,
   allPriorities,
+  quadrantConfig = DEFAULT_QUADRANT_CONFIG,
   isMasterView,
   onSelectTask,
   onStatusChange,
   onAddTaskToQuadrant,
   onReclassifyTask,
+  onOpenQuadrantSettings,
   searchQuery = '',
   filterPriority = 'all',
   filterType = 'all',
   filterTag = 'all',
 }) => {
+  const quadrants = getQuadrants3x3(quadrantConfig);
+
   // Filter active tasks
   const filteredTasks = tasks.filter((t) => {
     if (t.status === 'done') return false;
@@ -273,13 +292,13 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
     return true;
   });
 
-  // Group tasks for 3x3 Grid by Quadrant (1 to 9) on the 306-point scale
+  // Group tasks for 3x3 Grid by Quadrant (1 to 9) using quadrantConfig
   const getTasksForQuadrant = (quadrantNumber: number) => {
     const cellTasks = filteredTasks.filter((t) => {
-      const info = getRelativePriorityInfo(t, allPriorities);
+      const info = getRelativePriorityInfo(t, allPriorities, quadrantConfig);
       return info.quadrantNumber === quadrantNumber;
     });
-    return sortTasksByPriorityAndUrgency(cellTasks, allPriorities);
+    return sortTasksByPriorityAndUrgency(cellTasks, allPriorities, Date.now(), quadrantConfig);
   };
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -299,39 +318,33 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Top Banner */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-sm sm:text-base font-black text-slate-900">
-                Matriz de Priorización 3x3
-              </h2>
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                Días Reales: Planificación (Q9-Q7: inicio) · Ejecución (Q6-Q1: fin)
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Prioridad = Importante · Días de Calendario = Urgente (Q1 &lt;4d, Q2 &lt;7d, Q3 &lt;15d, Q4 &lt;21d, Q5 &lt;30d, Q6 &gt;30d).
-            </p>
-          </div>
+    <div className="space-y-3">
+      {/* Configuration Header Toolbar */}
+      <div className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <Settings2 className="w-4 h-4 text-blue-600 shrink-0" />
+          <span className="text-xs font-bold text-slate-800">
+            Reglas de Tiempo Matriz: <span className="font-extrabold text-blue-700">Q1 &lt; {quadrantConfig.q1Days}d</span> ·{' '}
+            <span className="font-extrabold text-amber-700">Q2 {quadrantConfig.q2UseNextSunday ? 'Sig. Domingo' : `< ${quadrantConfig.q2CustomDays}d`}</span>
+          </span>
         </div>
-
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-          <ArrowUpDown className="w-3.5 h-3.5 text-blue-600" />
-          <span>Orden: Mayor Puntuación Primero</span>
-        </div>
+        {onOpenQuadrantSettings && (
+          <button
+            type="button"
+            onClick={onOpenQuadrantSettings}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors cursor-pointer"
+            title="Personalizar rangos de tiempo de cada cuadrante (Q1 a Q9)"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+            <span>Ajustar Rangos de Q1-Q9</span>
+          </button>
+        )}
       </div>
 
       {/* 3x3 GRID CONTAINER */}
       <div>
-        {/* 3x3 Grid Cells without column classification banners */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-          {QUADRANTS_3X3.map((q) => {
+          {quadrants.map((q) => {
             const cellTasks = getTasksForQuadrant(q.quadrantNumber);
             const IconComp = q.icon;
 
@@ -369,14 +382,26 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => onAddTaskToQuadrant(q.quadrantNumber)}
-                    className="p-1 hover:bg-white text-slate-500 hover:text-blue-600 rounded-lg transition-all cursor-pointer shadow-2xs border border-transparent hover:border-slate-200 shrink-0"
-                    title={`Agregar tarea en ${q.title}`}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {onOpenQuadrantSettings && (
+                      <button
+                        type="button"
+                        onClick={onOpenQuadrantSettings}
+                        className="p-1 hover:bg-white text-slate-400 hover:text-slate-700 rounded-lg transition-all cursor-pointer shadow-2xs border border-transparent hover:border-slate-200 shrink-0"
+                        title={`Ajustar rango de tiempo de Q${q.quadrantNumber}`}
+                      >
+                        <Settings2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onAddTaskToQuadrant(q.quadrantNumber)}
+                      className="p-1 hover:bg-white text-slate-500 hover:text-blue-600 rounded-lg transition-all cursor-pointer shadow-2xs border border-transparent hover:border-slate-200 shrink-0"
+                      title={`Agregar tarea en ${q.title}`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Task List */}

@@ -1,4 +1,4 @@
-import { TaskItem, CustomPriorityDefinition, TaskStatus } from '../types';
+import { TaskItem, CustomPriorityDefinition, TaskStatus, QuadrantConfig, DEFAULT_QUADRANT_CONFIG } from '../types';
 import { calculateTimeLevel } from './timeColor';
 
 export interface TaskStatusMismatch {
@@ -13,8 +13,7 @@ export interface TaskStatusMismatch {
 
 /**
  * Calculates whether a task's current status is inconsistent with its start date,
- * end date, and current time. For example, if start date has passed or end date is near,
- * the task should NOT remain in "Por Hacer" (todo).
+ * end date, and current time.
  */
 export function detectTaskStatusMismatch(
   task: TaskItem,
@@ -103,10 +102,6 @@ export function detectTaskStatusMismatch(
   };
 }
 
-/**
- * Calculates the exact Relative Priority Score for a task.
- * Score = (Priority Level * 20) + Percent Time Elapsed
- */
 export interface TaskUrgencyDetails {
   percentElapsed: number;
   effectiveUrgency: number;
@@ -116,35 +111,84 @@ export interface TaskUrgencyDetails {
   score: number;
   quadrantNumber: number;
   mismatch: TaskStatusMismatch;
+  targetHours: number;
+  criticidad: number;
+  isQ6DirectToQ2Alert: boolean;
+  isOverdue: boolean;
+  hoursOverdue: number;
 }
 
 /**
- * Retorna el cuadrante (1 a 9) según la Matriz 3x3 del Algoritmo de ~170 Puntos:
- *
- * Zona de Planificación (Antes de la fecha de inicio, 0 a 35 pts)
- * Q9: 0 - 15 pts (Tareas recién creadas / primer tercio de espera)
- * Q8: 16 - 25 pts (Tareas acercándose a la fecha de inicio)
- * Q7: 26 - 35 pts (Listas para arrancar / base de 30 pts de tiempo + prioridad)
- *
- * Zona de Ejecución (Después de la fecha de inicio o activas, 36 a 136+ pts)
- * Q6: 36 - 55 pts (Primer 20% de avance / flujo inicial)
- * Q5: 56 - 75 pts (El núcleo de trabajo activo: 30% al 40% de avance)
- * Q4: 76 - 95 pts (Tareas maduras: 50% al 60% de avance)
- * Q3: 96 - 115 pts (Recta final: 70% al 80% de avance)
- * Q2: 116 - 135 pts (Al límite: 90%+ o alta prioridad con bloqueos acumulados)
- * Q1: 136+ pts (Día límite de entrega: 130 pts de tiempo + prioridad o vencidas)
+ * Returns the timestamp for the end of the next Sunday (23:59:59.999).
+ * If today is Sunday, it returns the end of today.
  */
-export function getQuadrantFromScore(score: number): number {
-  if (isNaN(score)) return 9;
-  if (score >= 136) return 1;
-  if (score >= 116) return 2;
-  if (score >= 96) return 3;
-  if (score >= 76) return 4;
-  if (score >= 56) return 5;
-  if (score >= 36) return 6;
-  if (score >= 26) return 7;
-  if (score >= 16) return 8;
-  return 9;
+export function getNextSundayEnd(nowMs: number = Date.now()): number {
+  const date = new Date(nowMs);
+  const day = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const daysUntilSunday = day === 0 ? 0 : 7 - day;
+  const sunday = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + daysUntilSunday,
+    23,
+    59,
+    59,
+    999
+  );
+  return sunday.getTime();
+}
+
+/**
+ * Direct Quadrant calculation (1 to 9) using customizable thresholds in QuadrantConfig
+ */
+export function getQuadrantForTask(
+  task: TaskItem,
+  nowMs: number = Date.now(),
+  config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
+): number {
+  if (task.status === 'done') return 9;
+
+  const startMs = new Date(task.startDate).getTime();
+  const endMs = new Date(task.endDate).getTime();
+  const nextSundayEnd = getNextSundayEnd(nowMs);
+
+  const isStarted =
+    !isNaN(startMs) &&
+    (nowMs >= startMs ||
+      task.status === 'in_progress' ||
+      task.status === 'in_review' ||
+      task.status === 'waiting');
+
+  const msInQ7 = (config.q7DaysPostSunday || 15) * 24 * 60 * 60 * 1000;
+  const msInQ8 = (config.q8DaysPostSunday || 30) * 24 * 60 * 60 * 1000;
+
+  if (!isStarted) {
+    // Planificación
+    const q6End = config.q6UseNextSunday
+      ? nextSundayEnd
+      : nowMs + (config.q6CustomDays || 7) * 24 * 60 * 60 * 1000;
+
+    if (startMs <= q6End) return 6;
+    if (startMs <= nextSundayEnd + msInQ7) return 7;
+    if (startMs <= nextSundayEnd + msInQ8) return 8;
+    return 9;
+  } else {
+    // Ejecución
+    const daysUntilEnd = (endMs - nowMs) / (1000 * 60 * 60 * 24);
+    const isOverdue = nowMs >= endMs;
+
+    const q2End = config.q2UseNextSunday
+      ? nextSundayEnd
+      : nowMs + (config.q2CustomDays || 7) * 24 * 60 * 60 * 1000;
+    const q3End = nextSundayEnd + (config.q3DaysPostSunday || 15) * 24 * 60 * 60 * 1000;
+    const q4End = nextSundayEnd + (config.q4DaysPostSunday || 30) * 24 * 60 * 60 * 1000;
+
+    if (isOverdue || daysUntilEnd < (config.q1Days || 4)) return 1;
+    if (endMs <= q2End) return 2;
+    if (endMs <= q3End) return 3;
+    if (endMs <= q4End) return 4;
+    return 5;
+  }
 }
 
 export interface QuadrantColorStyle {
@@ -254,31 +298,34 @@ export function getQuadrantStyle(quadrantNumber: number): QuadrantColorStyle {
 }
 
 /**
- * Calculates complete urgency and importance details for a task,
- * implementing the 140-point frontier (Fase 1: Planificación, Fase 2: Ejecución)
- * and cumulative friction history.
+ * Calculates complete urgency and importance details for a task
  */
 export function calculateTaskUrgencyInfo(
   task: TaskItem,
   allPriorities?: CustomPriorityDefinition[],
-  now: number = Date.now()
+  now: number = Date.now(),
+  config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
 ): TaskUrgencyDetails {
   const isDone = task.status === 'done';
   const timeCalc = calculateTimeLevel(task.startDate, task.endDate, now, isDone);
-
   const percentElapsed = isNaN(timeCalc.percentElapsed) ? 0 : timeCalc.percentElapsed;
-  const isOverdue = timeCalc.isOverdue && !isDone;
 
   const startMs = new Date(task.startDate).getTime();
   const endMs = new Date(task.endDate).getTime();
-  const totalDurationMs = Math.max(60000, isNaN(endMs - startMs) ? 60000 : endMs - startMs);
-  const remainingMs = isNaN(endMs) ? 0 : endMs - now;
-  const isStarted = !isDone && !isNaN(startMs) && (now >= startMs || task.status === 'in_progress' || task.status === 'in_review' || task.status === 'waiting');
+  const nextSundayEnd = getNextSundayEnd(now);
+
+  const isStarted =
+    !isDone &&
+    !isNaN(startMs) &&
+    (now >= startMs ||
+      task.status === 'in_progress' ||
+      task.status === 'in_review' ||
+      task.status === 'waiting');
 
   const mismatch = detectTaskStatusMismatch(task, now);
 
-  // 1. DIMENSIÓN PRIORIDAD (Base nominal: 10 a 50 puntos)
-  let pLevelNum = 2; // Default Media (20 pts)
+  // Criticidad (1 a 5)
+  let criticidad = 2; // Default Media
   const taskPriorityStr = (task.priority || 'media').toLowerCase();
   const matched = allPriorities?.find(
     (p) =>
@@ -287,141 +334,68 @@ export function calculateTaskUrgencyInfo(
   );
 
   if (matched && typeof matched.level === 'number' && !isNaN(matched.level)) {
-    pLevelNum = matched.level;
+    criticidad = matched.level;
   } else {
     const norm = taskPriorityStr.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (norm.includes('critica') || norm.includes('critical') || norm === '5') pLevelNum = 5;
-    else if (norm.includes('urgente') || norm.includes('urgent') || norm === '4') pLevelNum = 4;
-    else if (norm.includes('alta') || norm.includes('high') || norm === '3') pLevelNum = 3;
-    else if (norm.includes('baja') || norm.includes('low') || norm === '1') pLevelNum = 1;
-    else pLevelNum = 2;
+    if (norm.includes('critica') || norm.includes('critical') || norm === '5') criticidad = 5;
+    else if (norm.includes('urgente') || norm.includes('urgent') || norm === '4') criticidad = 4;
+    else if (norm.includes('alta') || norm.includes('high') || norm === '3') criticidad = 3;
+    else if (norm.includes('baja') || norm.includes('low') || norm === '1') criticidad = 1;
+    else criticidad = 2;
   }
-  // 1. PRIORIDAD (Empuje relativo: 0 a 20 puntos)
-  // Baja: 0 pts, Media: 5 pts, Alta: 10 pts, Urgente: 15 pts, Crítica: 20 pts
-  let priorityPoints = 5; // Default Media (5 pts)
-  if (pLevelNum === 1) priorityPoints = 0;
-  else if (pLevelNum === 2) priorityPoints = 5;
-  else if (pLevelNum === 3) priorityPoints = 10;
-  else if (pLevelNum === 4) priorityPoints = 15;
-  else if (pLevelNum === 5) priorityPoints = 20;
 
-  // 2. ESTADOS & HISTORIAL DE FRICCIÓN (Acumulativo)
-  // Por hacer (a tiempo): 0 pts
-  // En progreso: +2 pts (Suma mínima por estar activa)
-  // En espera (Bloqueada): +5 pts (Sucia la tarea; si pasa varias veces, acumula)
-  // En revisión: +5 pts (Cuello de botella técnico)
-  // Por hacer (atrasada): +10 pts (Penalización por no arrancar a tiempo)
-  const accumulatedFriction = Math.max(0, task.frictionPoints || 0);
-  const waitingFriction = Math.max(accumulatedFriction, task.status === 'waiting' ? 5 : 0);
+  const quadrantNumber = getQuadrantForTask(task, now, config);
 
+  // Target hours / remaining hours calculation
+  const targetHours = isStarted
+    ? (endMs - now) / (1000 * 60 * 60)
+    : (startMs - now) / (1000 * 60 * 60);
+
+  const isOverdue = now >= endMs && !isDone;
+  const hoursOverdue = isOverdue ? (now - endMs) / (1000 * 60 * 60) : 0;
+
+  // Formula exact mathematical calculation
   let rawScore = 0;
-
   if (isDone) {
     rawScore = 0;
-  } else if (!isStarted) {
-    // ========================================================
-    // ZONA DE PLANIFICACIÓN (Antes de la Fecha de Inicio)
-    // - Q9: Más de 1 mes (+30 días) para la fecha de inicio -> 10 pts
-    // - Q8: Menos de 30 días (15 a 30 días) para la fecha de inicio -> 20 pts
-    // - Q7: Menos de 15 días (< 15 días) para la fecha de inicio -> 30 pts
-    // ========================================================
-    const daysUntilStart = (startMs - now) / (1000 * 60 * 60 * 24);
-
-    let prepTimePoints = 10;
-    if (daysUntilStart > 30) {
-      prepTimePoints = 10; // Q9 (0 - 15 pts)
-    } else if (daysUntilStart >= 15) {
-      prepTimePoints = 20; // Q8 (16 - 25 pts)
-    } else {
-      prepTimePoints = 30; // Q7 (26 - 35 pts)
-    }
-
-    rawScore = prepTimePoints + priorityPoints;
-    // Tope en Zona de Planificación: máximo 35 pts (Q9, Q8, Q7)
-    rawScore = Math.min(35, Math.max(0, rawScore));
+  } else if (targetHours >= 0) {
+    rawScore = criticidad / (targetHours + 1);
   } else {
-    // ========================================================
-    // ZONA DE EJECUCIÓN ACTIVA (Después de la Fecha de Inicio)
-    // Días restantes para la Fecha de Entrega (endDate):
-    // - Q6: > 30 días (+1 mes) para la entrega -> 40 pts (36 - 55 pts)
-    // - Q5: < 30 días (21 a 30 días) para la entrega -> 60 pts (56 - 75 pts)
-    // - Q4: < 21 días (15 a 21 días) para la entrega -> 80 pts (76 - 95 pts)
-    // - Q3: < 15 días (7 a 15 días) para la entrega -> 100 pts (96 - 115 pts)
-    // - Q2: < 7 días (4 a 7 días) para la entrega -> 120 pts (116 - 135 pts)
-    // - Q1: < 4 días (0 a 4 días) o Vencidas -> 140+ pts (136+ pts)
-    // ========================================================
-    const daysUntilEnd = (endMs - now) / (1000 * 60 * 60 * 24);
-
-    let timePoints = 40;
-    if (isOverdue || daysUntilEnd <= 0) {
-      timePoints = 145; // Vencida -> Directo Q1
-    } else if (daysUntilEnd < 4) {
-      timePoints = 140; // < 4 días -> Q1 (136+ pts)
-    } else if (daysUntilEnd < 7) {
-      timePoints = 120; // < 7 días -> Q2 (116-135 pts)
-    } else if (daysUntilEnd < 15) {
-      timePoints = 100; // < 15 días -> Q3 (96-115 pts)
-    } else if (daysUntilEnd < 21) {
-      timePoints = 80; // < 21 días -> Q4 (76-95 pts)
-    } else if (daysUntilEnd < 30) {
-      timePoints = 60; // < 30 días -> Q5 (56-75 pts)
-    } else {
-      timePoints = 40; // > 30 días (+1 mes para entrega) -> Q6 (36-55 pts)
-    }
-
-    // Estados actuales
-    let statePoints = 0;
-    if (task.status === 'in_progress') {
-      statePoints = 2; // +2 pts por estar activa
-    } else if (task.status === 'in_review') {
-      statePoints = 5; // +5 pts cuello de botella técnico
-    } else if (task.status === 'waiting') {
-      statePoints = 5; // +5 pts bloqueada
-    } else if (task.status === 'todo' && now >= startMs) {
-      statePoints = 10; // +10 pts atrasada sin arrancar a tiempo
-    }
-
-    rawScore = timePoints + priorityPoints + waitingFriction + statePoints;
-    // Si la tarea inició, debe tener como mínimo 36 puntos de base (Q6+)
-    rawScore = Math.max(36, rawScore);
+    const hoursOverdueAbs = Math.abs(targetHours);
+    rawScore = 100 + criticidad * hoursOverdueAbs;
   }
 
-  const score = isDone
-    ? 0
-    : isNaN(rawScore)
-    ? 40
-    : Math.round(rawScore * 100) / 100;
+  const score = Math.round(rawScore * 100) / 100;
 
-  const quadrantNumber = isDone ? 9 : getQuadrantFromScore(score);
+  // Q6 alert condition
+  const q6End = config.q6UseNextSunday ? nextSundayEnd : now + (config.q6CustomDays || 7) * 24 * 60 * 60 * 1000;
+  const isQ6DirectToQ2Alert =
+    !isStarted && startMs <= q6End && endMs <= nextSundayEnd;
 
-  // Categorize Urgency & Priority for backwards compatibility
   let urgencyCategory: 'high' | 'medium' | 'low' = 'low';
-  if (quadrantNumber <= 3) {
-    urgencyCategory = 'high';
-  } else if (quadrantNumber <= 6) {
-    urgencyCategory = 'medium';
-  } else {
-    urgencyCategory = 'low';
-  }
+  if (quadrantNumber <= 3) urgencyCategory = 'high';
+  else if (quadrantNumber <= 6) urgencyCategory = 'medium';
+  else urgencyCategory = 'low';
 
   let priorityCategory: 'high' | 'medium' | 'low' = 'medium';
-  if (pLevelNum >= 4) {
-    priorityCategory = 'high';
-  } else if (pLevelNum >= 2) {
-    priorityCategory = 'medium';
-  } else {
-    priorityCategory = 'low';
-  }
+  if (criticidad >= 4) priorityCategory = 'high';
+  else if (criticidad >= 2) priorityCategory = 'medium';
+  else priorityCategory = 'low';
 
   return {
     percentElapsed,
     effectiveUrgency: score,
     urgencyCategory,
-    priorityLevelNum: pLevelNum,
+    priorityLevelNum: criticidad,
     priorityCategory,
     score,
     quadrantNumber,
     mismatch,
+    targetHours: Math.max(0, targetHours),
+    criticidad,
+    isQ6DirectToQ2Alert,
+    isOverdue,
+    hoursOverdue,
   };
 }
 
@@ -430,18 +404,19 @@ export function calculateTaskUrgencyInfo(
  */
 export function getTaskPriorityScore(
   task: TaskItem,
-  allPriorities?: CustomPriorityDefinition[]
+  allPriorities?: CustomPriorityDefinition[],
+  config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
 ): number {
-  return calculateTaskUrgencyInfo(task, allPriorities).score;
+  return calculateTaskUrgencyInfo(task, allPriorities, Date.now(), config).score;
 }
 
 /**
- * Primary sort: Closest End Date (Fecha de Entrega más cercana primero).
- * Secondary sort: Higher Priority Level / Score first for tied dates.
+ * Primary sort: Closest End Date
  */
 export function sortTasksByDeadlineAndPriority(
   tasks: TaskItem[],
-  allPriorities?: CustomPriorityDefinition[]
+  allPriorities?: CustomPriorityDefinition[],
+  config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
 ): TaskItem[] {
   return [...tasks].sort((a, b) => {
     const endA = new Date(a.endDate).getTime();
@@ -451,38 +426,45 @@ export function sortTasksByDeadlineAndPriority(
       return endA - endB;
     }
 
-    const scoreA = getTaskPriorityScore(a, allPriorities);
-    const scoreB = getTaskPriorityScore(b, allPriorities);
+    const scoreA = getTaskPriorityScore(a, allPriorities, config);
+    const scoreB = getTaskPriorityScore(b, allPriorities, config);
     return scoreB - scoreA;
   });
 }
 
 /**
- * Sorts tasks strictly by Relative Priority Score first (highest priority + urgency first),
- * then by earliest delivery date, then by earliest start date.
+ * Sorts tasks within quadrants
  */
 export function sortTasksByPriorityAndUrgency(
   tasks: TaskItem[],
   allPriorities?: CustomPriorityDefinition[],
-  now: number = Date.now()
+  now: number = Date.now(),
+  config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
 ): TaskItem[] {
   const mapped = tasks.map((t) => ({
     task: t,
-    info: calculateTaskUrgencyInfo(t, allPriorities, now),
+    info: calculateTaskUrgencyInfo(t, allPriorities, now, config),
   }));
 
   mapped.sort((a, b) => {
-    // 1. Mayor puntuación primero (score de más a menos)
+    // 1. Regla especial Q6
+    if (a.info.quadrantNumber === 6 && b.info.quadrantNumber === 6) {
+      if (a.info.isQ6DirectToQ2Alert && !b.info.isQ6DirectToQ2Alert) return -1;
+      if (!a.info.isQ6DirectToQ2Alert && b.info.isQ6DirectToQ2Alert) return 1;
+    }
+
+    // 2. Mayor puntuación primero
     if (b.info.score !== a.info.score) {
       return b.info.score - a.info.score;
     }
-    // 2. Desempate: Fecha fin más cercana
-    const endA = new Date(a.task.endDate).getTime();
-    const endB = new Date(b.task.endDate).getTime();
-    if (endA !== endB) return endA - endB;
-    // 3. Desempate: Fecha inicio más cercana
-    return new Date(a.task.startDate).getTime() - new Date(b.task.startDate).getTime();
+
+    // 3. Desempate por fecha fin
+    const endMsA = new Date(a.task.endDate).getTime();
+    const endMsB = new Date(b.task.endDate).getTime();
+    return endMsA - endMsB;
   });
 
   return mapped.map((item) => item.task);
 }
+
+

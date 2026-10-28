@@ -158,6 +158,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       )}
 
+      {/* Q6 Direct-to-Q2 Special Alert Badge */}
+      {!isDone && urgencyInfo.isQ6DirectToQ2Alert && (
+        <div
+          className="mt-1.5 p-1 px-2 rounded-lg bg-sky-500/15 text-sky-900 border border-sky-300 flex items-center gap-1 text-[10px] font-bold"
+          title="Esta tarea inicia y termina antes del siguiente domingo. Al iniciar pasará directamente a Q2."
+        >
+          <Zap className="w-3 h-3 text-sky-600 shrink-0 animate-pulse" />
+          <span className="truncate">⚡ Alerta Q6: Inicia y Termina Esta Semana</span>
+        </div>
+      )}
+
       {/* Bottom Row: Badges (Semáforo, Prioridad, Espera, Meta) */}
       <div
         className={`flex items-center justify-between gap-1.5 mt-2 pt-1.5 border-t text-[10px] ${
@@ -225,9 +236,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   ? 'bg-amber-100/90 text-amber-900 border border-amber-300/80'
                   : 'bg-slate-100 text-slate-700 border border-slate-200'
               }`}
-              title={`Clasificación Matriz 3x3: ${Number(urgencyInfo.score).toFixed(2)} pts (Cuadrante Q${urgencyInfo.quadrantNumber})${task.frictionPoints ? ` · Fricción acumulada: +${task.frictionPoints} pts` : ''}`}
+              title={`Matriz Q${urgencyInfo.quadrantNumber}: ${urgencyInfo.score.toFixed(2)} pts (${urgencyInfo.isOverdue ? `${urgencyInfo.hoursOverdue.toFixed(1)}h vencida` : `${urgencyInfo.targetHours.toFixed(1)}h restantes`}, Criticidad C${urgencyInfo.criticidad})`}
             >
-              Q{urgencyInfo.quadrantNumber} · {Number(urgencyInfo.score).toFixed(2)} pts
+              Q{urgencyInfo.quadrantNumber} · {urgencyInfo.score.toFixed(2)} pts
             </span>
           )}
 

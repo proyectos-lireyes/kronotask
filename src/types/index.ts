@@ -137,3 +137,28 @@ export interface ImportBoardAction {
   suffix?: string;
 }
 
+export interface QuadrantConfig {
+  q1Days: number; // default 4
+  q2UseNextSunday: boolean; // default true
+  q2CustomDays: number; // default 7
+  q3DaysPostSunday: number; // default 15
+  q4DaysPostSunday: number; // default 30
+  q6UseNextSunday: boolean; // default true
+  q6CustomDays: number; // default 7
+  q7DaysPostSunday: number; // default 15
+  q8DaysPostSunday: number; // default 30
+}
+
+export const DEFAULT_QUADRANT_CONFIG: QuadrantConfig = {
+  q1Days: 4,
+  q2UseNextSunday: true,
+  q2CustomDays: 7,
+  q3DaysPostSunday: 15,
+  q4DaysPostSunday: 30,
+  q6UseNextSunday: true,
+  q6CustomDays: 7,
+  q7DaysPostSunday: 15,
+  q8DaysPostSunday: 30,
+};
+
+
