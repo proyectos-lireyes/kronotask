@@ -233,7 +233,15 @@ export default function App() {
   });
 
   const handleUploadCloudBackup = async (): Promise<boolean> => {
-    if (!currentUser) return false;
+    if (!currentUser) {
+      setCloudSyncStatus({
+        loading: false,
+        lastSyncTime: null,
+        msg: 'Inicia sesión con Google para respaldar en la nube',
+        isError: true,
+      });
+      return false;
+    }
     setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
     try {
       await saveUserDataToCloud(currentUser, {
@@ -242,13 +250,16 @@ export default function App() {
         tags,
         customTypes: types,
         customPriorities: priorities,
+        quadrantConfig,
+        theme,
+        acceptedCollisions,
       });
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       localStorage.setItem('kronotask_last_cloud_sync', nowStr);
       setCloudSyncStatus({
         loading: false,
         lastSyncTime: nowStr,
-        msg: '✓ Respaldo subido a la nube con éxito',
+        msg: '✓ Respaldo completo subido a la nube con éxito',
         isError: false,
       });
       return true;
@@ -264,7 +275,15 @@ export default function App() {
   };
 
   const handleRestoreCloudBackup = async (): Promise<boolean> => {
-    if (!currentUser) return false;
+    if (!currentUser) {
+      setCloudSyncStatus({
+        loading: false,
+        lastSyncTime: null,
+        msg: 'Inicia sesión con Google para restaurar la nube',
+        isError: true,
+      });
+      return false;
+    }
     setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
     try {
       const cloudData = await fetchUserDataFromCloud(currentUser);
@@ -289,6 +308,18 @@ export default function App() {
           setPriorities(cloudData.customPriorities);
           saveCustomPriorities(cloudData.customPriorities);
         }
+        if (cloudData.quadrantConfig) {
+          setQuadrantConfig(cloudData.quadrantConfig);
+          saveQuadrantConfig(cloudData.quadrantConfig);
+        }
+        if (cloudData.theme) {
+          setTheme(cloudData.theme);
+          saveTheme(cloudData.theme);
+        }
+        if (cloudData.acceptedCollisions && Array.isArray(cloudData.acceptedCollisions)) {
+          setAcceptedCollisions(cloudData.acceptedCollisions);
+          saveAcceptedCollisions(cloudData.acceptedCollisions);
+        }
         const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         localStorage.setItem('kronotask_last_cloud_sync', nowStr);
         setCloudSyncStatus({
@@ -302,7 +333,7 @@ export default function App() {
         setCloudSyncStatus((prev) => ({
           loading: false,
           lastSyncTime: prev.lastSyncTime,
-          msg: 'No se encontró ninguna copia guardada en la nube aún',
+          msg: `Sin copia previa para ${currentUser.email}`,
           isError: true,
         }));
         return false;
@@ -422,8 +453,13 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await logout();
-    setCurrentUser(null);
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Logout safe exception handler:', e);
+    } finally {
+      setCurrentUser(null);
+    }
   };
 
   const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus, waitingDays?: number) => {

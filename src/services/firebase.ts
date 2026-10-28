@@ -21,6 +21,8 @@ import {
   CustomTag,
   CustomTypeDefinition,
   CustomPriorityDefinition,
+  QuadrantConfig,
+  LightThemeConfig,
 } from '../types';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -140,6 +142,9 @@ export interface CloudUserData {
   tags?: CustomTag[];
   customTypes?: CustomTypeDefinition[];
   customPriorities?: CustomPriorityDefinition[];
+  quadrantConfig?: QuadrantConfig;
+  theme?: LightThemeConfig;
+  acceptedCollisions?: string[];
 }
 
 export function getEmailDocKey(email: string): string {
@@ -373,15 +378,35 @@ export const setAccessToken = (token: string) => {
 };
 
 export const logout = async () => {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      await GoogleAuth.signOut();
-    } catch (e) {
-      console.warn('GoogleAuth signOut note:', e);
+  try {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        if (GoogleAuth && typeof GoogleAuth.signOut === 'function') {
+          await GoogleAuth.signOut().catch((err) => console.warn('Native GoogleAuth signOut note:', err));
+        }
+      } catch (nativeErr) {
+        console.warn('GoogleAuth signOut safe note:', nativeErr);
+      }
     }
+  } catch (checkErr) {
+    console.warn('Native platform check note:', checkErr);
   }
-  await signOut(auth);
-  saveStoredUserProfile(null);
-  localStorage.removeItem(STORAGE_TOKEN_KEY);
+
+  try {
+    if (auth && auth.currentUser) {
+      await signOut(auth).catch((err) => console.warn('Firebase signOut note:', err));
+    }
+  } catch (authErr) {
+    console.warn('Firebase signOut safe note:', authErr);
+  }
+
+  try {
+    saveStoredUserProfile(null);
+    localStorage.removeItem(STORAGE_TOKEN_KEY);
+    localStorage.removeItem(STORAGE_USER_KEY);
+  } catch (storageErr) {
+    console.warn('Storage cleanup note:', storageErr);
+  }
+
   cachedAccessToken = null;
 };
