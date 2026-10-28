@@ -320,64 +320,53 @@ export function calculateTaskUrgencyInfo(
     rawScore = 0;
   } else if (!isStarted) {
     // ========================================================
-    // FASE 1: PREPARACIÓN (0 a 40 pts)
-    // 0% - 30% del tiempo para iniciar: 10 pts (Q9)
-    // 31% - 60% del tiempo para iniciar: 20 pts (Q8)
-    // 61% - 90% del tiempo para iniciar: 30 pts (Q7)
-    // 91% - 100% ("Prontas" a iniciar): 40 pts (Entran a Q6 como pre-embarque/transición)
+    // ZONA DE PLANIFICACIÓN (Antes de la Fecha de Inicio)
+    // - Q9: Más de 1 mes (+30 días) para la fecha de inicio -> 10 pts
+    // - Q8: Menos de 30 días (15 a 30 días) para la fecha de inicio -> 20 pts
+    // - Q7: Menos de 15 días (< 15 días) para la fecha de inicio -> 30 pts
     // ========================================================
-    const timeUntilStartMs = Math.max(0, startMs - now);
-    const createdMs = task.createdAt ? new Date(task.createdAt).getTime() : NaN;
-    let prepRatio = 0.5;
-    if (!isNaN(createdMs) && createdMs < startMs) {
-      const totalPrepMs = Math.max(60000, startMs - createdMs);
-      prepRatio = Math.max(0, Math.min(1, (now - createdMs) / totalPrepMs));
-    } else {
-      const horizonMs = Math.max(7 * 24 * 60 * 60 * 1000, totalDurationMs);
-      prepRatio = Math.max(0, Math.min(1, 1 - (timeUntilStartMs / horizonMs)));
-    }
+    const daysUntilStart = (startMs - now) / (1000 * 60 * 60 * 24);
 
     let prepTimePoints = 10;
-    if (prepRatio <= 0.30) {
-      prepTimePoints = 10;
-    } else if (prepRatio <= 0.60) {
-      prepTimePoints = 20;
-    } else if (prepRatio <= 0.90) {
-      prepTimePoints = 30;
+    if (daysUntilStart > 30) {
+      prepTimePoints = 10; // Q9 (0 - 15 pts)
+    } else if (daysUntilStart >= 15) {
+      prepTimePoints = 20; // Q8 (16 - 25 pts)
     } else {
-      prepTimePoints = 40; // Prontas a iniciar hoy: 40 pts (sala de pre-embarque en Q6)
+      prepTimePoints = 30; // Q7 (26 - 35 pts)
     }
 
     rawScore = prepTimePoints + priorityPoints;
-    // Si aún no inicia pero es pronta (prepTimePoints = 40), convive en Q6 (hasta 55 pts con prioridad)
-    if (prepTimePoints === 40) {
-      rawScore = Math.min(55, Math.max(36, rawScore));
-    } else {
-      rawScore = Math.min(35, Math.max(0, rawScore));
-    }
+    // Tope en Zona de Planificación: máximo 35 pts (Q9, Q8, Q7)
+    rawScore = Math.min(35, Math.max(0, rawScore));
   } else {
     // ========================================================
-    // FASE 2: EJECUCIÓN (50 a 130 pts)
-    // ¡Tarea Iniciada! (0% a 10% de ejecución): Base de tiempo 50 pts (+10 pts diferenciador).
-    // De 10% a 100% de ejecución: escala hasta 130 pts.
-    // Piso Nominal de Duración (Microtareas y Tareas Cortas):
-    // - Micro-tareas (< 24h): +30 pts extra (nacen en Q4 con ~85 pts)
-    // - Tareas cortas (1 a 3 días / 24h a 72h): +15 pts extra (nacen en Q5 con ~70 pts)
-    // - Tareas largas (> 3 días / 72h): +0 pts (recorren todo el camino lentamente en Q6)
+    // ZONA DE EJECUCIÓN ACTIVA (Después de la Fecha de Inicio)
+    // Días restantes para la Fecha de Entrega (endDate):
+    // - Q6: > 30 días (+1 mes) para la entrega -> 40 pts (36 - 55 pts)
+    // - Q5: < 30 días (21 a 30 días) para la entrega -> 60 pts (56 - 75 pts)
+    // - Q4: < 21 días (15 a 21 días) para la entrega -> 80 pts (76 - 95 pts)
+    // - Q3: < 15 días (7 a 15 días) para la entrega -> 100 pts (96 - 115 pts)
+    // - Q2: < 7 días (4 a 7 días) para la entrega -> 120 pts (116 - 135 pts)
+    // - Q1: < 4 días (0 a 4 días) o Vencidas -> 140+ pts (136+ pts)
     // ========================================================
-    const clampedElapsed = Math.max(0, Math.min(100, percentElapsed));
-    let timePoints = 50;
-    if (clampedElapsed > 10) {
-      timePoints = 50 + ((clampedElapsed - 10) / 90) * 80; // 50 al 10%, 130 al 100%
-    }
+    const daysUntilEnd = (endMs - now) / (1000 * 60 * 60 * 24);
 
-    // Piso Nominal de Duración (Desempate por tamaño de ventana)
-    const durationHours = totalDurationMs / (1000 * 60 * 60);
-    let durationBonus = 0;
-    if (durationHours < 24) {
-      durationBonus = 30; // Micro-tarea (< 24 horas): Salta directo a Q4 (~85 pts)
-    } else if (durationHours <= 72) {
-      durationBonus = 15; // Tarea corta (1 a 3 días): Salta a Q5 (~70 pts)
+    let timePoints = 40;
+    if (isOverdue || daysUntilEnd <= 0) {
+      timePoints = 145; // Vencida -> Directo Q1
+    } else if (daysUntilEnd < 4) {
+      timePoints = 140; // < 4 días -> Q1 (136+ pts)
+    } else if (daysUntilEnd < 7) {
+      timePoints = 120; // < 7 días -> Q2 (116-135 pts)
+    } else if (daysUntilEnd < 15) {
+      timePoints = 100; // < 15 días -> Q3 (96-115 pts)
+    } else if (daysUntilEnd < 21) {
+      timePoints = 80; // < 21 días -> Q4 (76-95 pts)
+    } else if (daysUntilEnd < 30) {
+      timePoints = 60; // < 30 días -> Q5 (56-75 pts)
+    } else {
+      timePoints = 40; // > 30 días (+1 mes para entrega) -> Q6 (36-55 pts)
     }
 
     // Estados actuales
@@ -392,15 +381,9 @@ export function calculateTaskUrgencyInfo(
       statePoints = 10; // +10 pts atrasada sin arrancar a tiempo
     }
 
-    // Vencimiento o entrega inminente
-    let overduePoints = 0;
-    if (isOverdue) {
-      overduePoints = 15; // Impulso para garantizar Q1 (136+ pts)
-    }
-
-    rawScore = timePoints + durationBonus + priorityPoints + waitingFriction + statePoints + overduePoints;
-    // Si la tarea inició, debe tener como mínimo 50 puntos de base
-    rawScore = Math.max(50, rawScore);
+    rawScore = timePoints + priorityPoints + waitingFriction + statePoints;
+    // Si la tarea inició, debe tener como mínimo 36 puntos de base (Q6+)
+    rawScore = Math.max(36, rawScore);
   }
 
   const score = isDone

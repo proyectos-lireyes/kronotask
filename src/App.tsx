@@ -1128,50 +1128,50 @@ export default function App() {
                   if (qNum === 1) {
                     newPriority = 'critica';
                     start = now - 1000 * 60 * 60 * 24;
-                    end = now + 1000 * 60 * 30; // 98%+ transcurrido -> Q1 (136+ pts)
+                    end = now + 1000 * 60 * 60 * 24 * 2; // < 4 días para la entrega -> Q1 (136+ pts)
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 2) {
                     newPriority = 'alta';
-                    start = now - 1000 * 60 * 60 * 20;
-                    end = now + 1000 * 60 * 60 * 2; // ~91% transcurrido -> Q2 (116-135 pts)
+                    start = now - 1000 * 60 * 60 * 24;
+                    end = now + 1000 * 60 * 60 * 24 * 5; // < 7 días para la entrega -> Q2 (116-135 pts)
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 3) {
                     newPriority = 'alta';
-                    start = now - 1000 * 60 * 60 * 15;
-                    end = now + 1000 * 60 * 60 * 5; // ~75% transcurrido -> Q3 (96-115 pts)
+                    start = now - 1000 * 60 * 60 * 24;
+                    end = now + 1000 * 60 * 60 * 24 * 10; // < 15 días para la entrega -> Q3 (96-115 pts)
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 4) {
                     newPriority = 'media';
-                    start = now - 1000 * 60 * 60 * 12;
-                    end = now + 1000 * 60 * 60 * 12; // ~50% transcurrido -> Q4 (76-95 pts)
+                    start = now - 1000 * 60 * 60 * 24;
+                    end = now + 1000 * 60 * 60 * 24 * 18; // < 21 días para la entrega -> Q4 (76-95 pts)
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 5) {
                     newPriority = 'media';
-                    start = now - 1000 * 60 * 60 * 8;
-                    end = now + 1000 * 60 * 60 * 16; // ~33% transcurrido -> Q5 (56-75 pts)
+                    start = now - 1000 * 60 * 60 * 24;
+                    end = now + 1000 * 60 * 60 * 24 * 25; // < 30 días para la entrega -> Q5 (56-75 pts)
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 6) {
                     newPriority = 'baja';
-                    start = now - 1000 * 60 * 60 * 1;
-                    end = now + 1000 * 60 * 60 * 23; // ~4% transcurrido -> Q6 (36-55 pts)
+                    start = now - 1000 * 60 * 60 * 24;
+                    end = now + 1000 * 60 * 60 * 24 * 40; // > 30 días para la entrega -> Q6 (36-55 pts)
                     if (newStatus === 'todo') newStatus = 'in_progress';
                   } else if (qNum === 7) {
-                    // Zona Planificación: Listas para arrancar (26-35 pts)
+                    // Zona Planificación: Arranque Inminente (< 15 días para inicio)
                     newPriority = 'media';
-                    start = now + 1000 * 60 * 60 * 1; // Inicia en 1h (approach > 67% -> 30 pts)
-                    end = now + 1000 * 60 * 60 * 48;
+                    start = now + 1000 * 60 * 60 * 24 * 5; // Inicia en 5 días (< 15d) -> Q7 (26-35 pts)
+                    end = now + 1000 * 60 * 60 * 24 * 35;
                     newStatus = 'todo';
                   } else if (qNum === 8) {
-                    // Zona Planificación: Acercándose al inicio (16-25 pts)
+                    // Zona Planificación: En Cola (15 a 30 días para inicio)
                     newPriority = 'media';
-                    start = now + 1000 * 60 * 60 * 24 * 3; // Inicia en 3 días (approach ~ 50% -> 20 pts)
-                    end = now + 1000 * 60 * 60 * 24 * 7;
+                    start = now + 1000 * 60 * 60 * 24 * 20; // Inicia en 20 días (15-30d) -> Q8 (16-25 pts)
+                    end = now + 1000 * 60 * 60 * 24 * 50;
                     newStatus = 'todo';
                   } else if (qNum === 9) {
-                    // Zona Planificación: Tareas recién creadas (0-15 pts)
+                    // Zona Planificación: Lejana (+30 días para inicio)
                     newPriority = 'baja';
-                    start = now + 1000 * 60 * 60 * 24 * 7; // Inicia en 7 días (approach < 33% -> 10 pts)
-                    end = now + 1000 * 60 * 60 * 24 * 14;
+                    start = now + 1000 * 60 * 60 * 24 * 40; // Inicia en 40 días (+30d) -> Q9 (0-15 pts)
+                    end = now + 1000 * 60 * 60 * 24 * 70;
                     newStatus = 'todo';
                   }
                 }

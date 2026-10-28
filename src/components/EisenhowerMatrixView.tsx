@@ -54,7 +54,7 @@ export interface Quadrant3x3Definition {
 }
 
 export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
-  // Fila 1: Crisis, Alta Urgencia y Recta Final (Zona de Ejecución Q1, Q2, Q3)
+  // Fila 1: Urgencia Extrema & Corto Plazo (Q1, Q2, Q3)
   {
     id: 'q1',
     quadrantNumber: 1,
@@ -63,9 +63,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'high',
     rowTitle: 'Fila 1: Crisis & Alta Urgencia',
     colTitle: 'Columna 1: Urgencia Extrema',
-    title: 'Q1: Entrega Límite & Vencidas',
+    title: 'Q1: Entrega en < 4 días & Vencidas',
     action: 'Atender Ahora Mismo',
-    subtitle: 'Día límite de entrega (130 pts tiempo + prioridad) o vencidas',
+    subtitle: 'Menos de 4 días para la fecha de entrega o tareas vencidas',
     icon: Flame,
     accentColor: 'text-rose-600',
     borderColor: 'border-rose-400',
@@ -81,9 +81,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'medium',
     rowTitle: 'Fila 1: Crisis & Alta Urgencia',
     colTitle: 'Columna 2: Inminencia',
-    title: 'Q2: Al Límite / Alta Urgencia',
-    action: 'Completar Hoy con Urgencia',
-    subtitle: 'Tareas al 90%+ o con alta prioridad y bloqueos acumulados',
+    title: 'Q2: Entrega en < 7 días',
+    action: 'Completar Esta Semana',
+    subtitle: 'Faltan entre 4 y 7 días para la fecha de entrega',
     icon: Zap,
     accentColor: 'text-amber-600',
     borderColor: 'border-amber-400',
@@ -99,9 +99,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'low',
     rowTitle: 'Fila 1: Crisis & Alta Urgencia',
     colTitle: 'Columna 3: Recta Final',
-    title: 'Q3: Entrando a Recta Final',
-    action: 'Destrabar y Finalizar',
-    subtitle: 'Tareas al 70% - 80% de avance o con revisiones acumuladas',
+    title: 'Q3: Entrega en < 15 días',
+    action: 'Destrabar y Avanzar',
+    subtitle: 'Faltan entre 7 y 15 días para la fecha de entrega',
     icon: CalendarCheck,
     accentColor: 'text-blue-600',
     borderColor: 'border-blue-300',
@@ -110,7 +110,7 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     badgeText: 'text-white',
   },
 
-  // Fila 2: Zona de Ejecución Activa (Q4, Q5, Q6)
+  // Fila 2: Zona de Ejecución Regular & Holgada (Q4, Q5, Q6)
   {
     id: 'q4',
     quadrantNumber: 4,
@@ -119,9 +119,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'high',
     rowTitle: 'Fila 2: Zona de Ejecución',
     colTitle: 'Columna 1: Consumo Alto',
-    title: 'Q4: Tareas Maduras & Micro-Tareas',
+    title: 'Q4: Entrega en < 21 días',
     action: 'Avanzar sin Demoras',
-    subtitle: 'Avance avanzado del plazo o micro-tareas (< 24h con piso nominal)',
+    subtitle: 'Faltan entre 15 y 21 días para la fecha de entrega',
     icon: Clock,
     accentColor: 'text-orange-600',
     borderColor: 'border-orange-300',
@@ -137,9 +137,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'medium',
     rowTitle: 'Fila 2: Zona de Ejecución',
     colTitle: 'Columna 2: Núcleo Activo',
-    title: 'Q5: Núcleo & Tareas Cortas',
+    title: 'Q5: Entrega en < 30 días',
     action: 'Mantener Ritmo Constante',
-    subtitle: 'El núcleo de trabajo activo o tareas cortas (1 a 3 días de ventana)',
+    subtitle: 'Faltan entre 21 y 30 días para la fecha de entrega',
     icon: ArrowRight,
     accentColor: 'text-yellow-800',
     borderColor: 'border-yellow-300',
@@ -155,9 +155,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'low',
     rowTitle: 'Fila 2: Zona de Ejecución',
     colTitle: 'Columna 3: Recién Iniciada',
-    title: 'Q6: Transición & Flujo Inicial',
-    action: 'Línea de Salida / Fluido',
-    subtitle: 'Pre-embarque (91-100% listas para arrancar) y tareas recién iniciadas',
+    title: 'Q6: Ejecución Holgada (+30 días)',
+    action: 'Puerta de Entrada',
+    subtitle: 'Tareas activas con más de 1 mes (+30 días) para la entrega',
     icon: Users,
     accentColor: 'text-sky-600',
     borderColor: 'border-sky-300',
@@ -166,7 +166,7 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     badgeText: 'text-white',
   },
 
-  // Fila 3: Zona de Planificación (Antes de la fecha de inicio, 0 - 35 pts)
+  // Fila 3: Zona de Planificación (Antes de la fecha de inicio: Q7, Q8, Q9)
   {
     id: 'q7',
     quadrantNumber: 7,
@@ -175,9 +175,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'high',
     rowTitle: 'Fila 3: Zona de Planificación',
     colTitle: 'Columna 1: Arranque Inminente',
-    title: 'Q7: Listas para Arrancar',
-    action: 'Preparar para Iniciar Hoy',
-    subtitle: 'Acumulan base de 30 pts de tiempo + prioridad',
+    title: 'Q7: Arranque Inminente (< 15 días)',
+    action: 'Preparar para Iniciar',
+    subtitle: 'Faltan menos de 15 días para la fecha de inicio',
     icon: AlertTriangle,
     accentColor: 'text-stone-700',
     borderColor: 'border-stone-300',
@@ -193,9 +193,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'medium',
     rowTitle: 'Fila 3: Zona de Planificación',
     colTitle: 'Columna 2: En Cola',
-    title: 'Q8: Acercándose al Inicio',
-    action: 'Preparar Requisitos',
-    subtitle: 'Tareas acercándose a su fecha de inicio programada',
+    title: 'Q8: En Cola (15 a 30 días)',
+    action: 'Revisar Requisitos',
+    subtitle: 'Faltan entre 15 y 30 días para la fecha de inicio',
     icon: Archive,
     accentColor: 'text-slate-600',
     borderColor: 'border-slate-300',
@@ -211,9 +211,9 @@ export const QUADRANTS_3X3: Quadrant3x3Definition[] = [
     uLevel: 'low',
     rowTitle: 'Fila 3: Zona de Planificación',
     colTitle: 'Columna 3: Planificación Inicial',
-    title: 'Q9: Tareas Recién Creadas',
-    action: 'Definir / Agendar',
-    subtitle: 'Primer tercio de espera antes de la fecha de inicio',
+    title: 'Q9: Planificación Lejana (+30 días)',
+    action: 'Agendar / Definir',
+    subtitle: 'Falta más de 1 mes (+30 días) para la fecha de inicio',
     icon: Trash2,
     accentColor: 'text-slate-500',
     borderColor: 'border-slate-200',
@@ -312,11 +312,11 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                 Matriz de Priorización 3x3
               </h2>
               <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                Escala ~170 pts: Planificación (Q9-Q7: 0 a 35 pts) · Ejecución (Q6-Q1: 36 a 136+ pts)
+                Días Reales: Planificación (Q9-Q7: inicio) · Ejecución (Q6-Q1: fin)
               </span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium">
-              Motor de tiempo (130 pts) + Prioridad (0-20 pts) + Historial de fricción acumulativa (+5 pts/espera).
+              Prioridad = Importante · Días de Calendario = Urgente (Q1 &lt;4d, Q2 &lt;7d, Q3 &lt;15d, Q4 &lt;21d, Q5 &lt;30d, Q6 &gt;30d).
             </p>
           </div>
         </div>
