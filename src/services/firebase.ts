@@ -118,7 +118,8 @@ export const initAuth = (
       }
     } else {
       const profile = getStoredUserProfile();
-      if (profile) {
+      const hasStoredKey = typeof window !== 'undefined' && localStorage.getItem(STORAGE_USER_KEY) !== null;
+      if (profile && hasStoredKey) {
         if (onAuthSuccess) {
           onAuthSuccess(
             { uid: profile.uid, email: profile.email, displayName: profile.displayName },
@@ -378,20 +379,33 @@ export const setAccessToken = (token: string) => {
 };
 
 export const logout = async () => {
+  // 1. Immediately wipe local storage and cached tokens synchronously
+  try {
+    saveStoredUserProfile(null);
+    localStorage.removeItem(STORAGE_USER_KEY);
+    localStorage.removeItem(STORAGE_TOKEN_KEY);
+    localStorage.removeItem('kronotask_user_profile_v5');
+    localStorage.removeItem('kronotask_user_token_v5');
+  } catch (storageErr) {
+    console.warn('Storage cleanup note:', storageErr);
+  }
+  cachedAccessToken = null;
+
+  // 2. Native Capacitor GoogleAuth sign out & disconnect
   try {
     if (Capacitor.isNativePlatform()) {
-      try {
-        if (GoogleAuth && typeof GoogleAuth.signOut === 'function') {
-          await GoogleAuth.signOut().catch((err) => console.warn('Native GoogleAuth signOut note:', err));
-        }
-      } catch (nativeErr) {
-        console.warn('GoogleAuth signOut safe note:', nativeErr);
+      if (GoogleAuth && typeof GoogleAuth.signOut === 'function') {
+        await GoogleAuth.signOut().catch((err: any) => console.warn('Native GoogleAuth signOut note:', err));
+      }
+      if (GoogleAuth && typeof (GoogleAuth as any).disconnect === 'function') {
+        await (GoogleAuth as any).disconnect().catch((err: any) => console.warn('Native GoogleAuth disconnect note:', err));
       }
     }
   } catch (checkErr) {
     console.warn('Native platform check note:', checkErr);
   }
 
+  // 3. Firebase Auth sign out
   try {
     if (auth && auth.currentUser) {
       await signOut(auth).catch((err) => console.warn('Firebase signOut note:', err));
@@ -399,14 +413,4 @@ export const logout = async () => {
   } catch (authErr) {
     console.warn('Firebase signOut safe note:', authErr);
   }
-
-  try {
-    saveStoredUserProfile(null);
-    localStorage.removeItem(STORAGE_TOKEN_KEY);
-    localStorage.removeItem(STORAGE_USER_KEY);
-  } catch (storageErr) {
-    console.warn('Storage cleanup note:', storageErr);
-  }
-
-  cachedAccessToken = null;
 };

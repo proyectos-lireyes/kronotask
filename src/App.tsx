@@ -453,6 +453,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    setCurrentUser(null);
     try {
       await logout();
     } catch (e) {
