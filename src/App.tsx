@@ -114,12 +114,12 @@ export default function App() {
 
   // Views order requested by user:
   // tablero (modal trigger), kanban, tabla, calendario, gantt, eisenhower, historial (plus global dashboard)
-  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'calendar' | 'gantt' | 'eisenhower' | 'history' | 'global'>(() => {
+  const [viewMode, setViewMode] = useState<'table' | 'calendar' | 'gantt' | 'eisenhower' | 'history' | 'global'>(() => {
     try {
       const savedView = localStorage.getItem('chronotask_last_view');
       if (
         savedView &&
-        ['kanban', 'table', 'calendar', 'gantt', 'eisenhower', 'history', 'global'].includes(savedView)
+        ['table', 'calendar', 'gantt', 'eisenhower', 'history', 'global'].includes(savedView)
       ) {
         return savedView as any;
       }
@@ -898,24 +898,24 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 flex flex-col gap-3">
         {/* Navigation & Controls Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          {/* Desktop Views Switcher: Eisenhower, Gantt, Tabla, Kanban, Calendario, Historial */}
-          <div className="hidden md:flex items-center gap-1 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
+          {/* Desktop Views Switcher: Eisenhower, Gantt, Tabla, Calendario, Historial */}
+          <div className="hidden md:flex items-center gap-1 bg-white dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 shadow-2xs">
             <button
               type="button"
               onClick={() => setViewMode('eisenhower')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'eisenhower' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                viewMode === 'eisenhower' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
               }`}
             >
               <Grid2x2 className="w-3.5 h-3.5" />
-              <span>Eisenhower</span>
+              <span>Eisenhower 3x3</span>
             </button>
 
             <button
               type="button"
               onClick={() => setViewMode('gantt')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'gantt' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'gantt' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
               }`}
             >
               <BarChart3 className="w-3.5 h-3.5" />
@@ -925,8 +925,8 @@ export default function App() {
             <button
               type="button"
               onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'table' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'table' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
               }`}
             >
               <List className="w-3.5 h-3.5" />
@@ -935,20 +935,9 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setViewMode('kanban')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'kanban' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Kanban</span>
-            </button>
-
-            <button
-              type="button"
               onClick={() => setViewMode('calendar')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'calendar' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'calendar' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
               }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />
@@ -958,14 +947,14 @@ export default function App() {
             <button
               type="button"
               onClick={() => setViewMode('history')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                viewMode === 'history' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'history' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
               }`}
             >
               <History className="w-3.5 h-3.5" />
               <span>Historial</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                viewMode === 'history' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                viewMode === 'history' ? 'bg-blue-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               }`}>
                 {completedTasks.length}
               </span>
@@ -974,26 +963,22 @@ export default function App() {
 
           {/* Action & Filter Controls */}
           <div className="flex items-center justify-between gap-2 w-full md:w-auto">
-            {/* Mobile-only Historial button */}
-            <div className="md:hidden flex items-center">
-              <button
-                type="button"
-                onClick={() => setViewMode(viewMode === 'history' ? 'kanban' : 'history')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                  viewMode === 'history'
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-                title="Historial de tareas completadas"
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>Historial</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  viewMode === 'history' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {completedTasks.length}
-                </span>
-              </button>
+            {/* Mobile-only View selector */}
+            <div className="md:hidden flex items-center gap-1 overflow-x-auto py-1">
+              {(['eisenhower', 'gantt', 'table', 'calendar', 'history'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setViewMode(v)}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer shrink-0 ${
+                    viewMode === v
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200'
+                  }`}
+                >
+                  <span className="capitalize">{v === 'eisenhower' ? '3x3 Matriz' : v}</span>
+                </button>
+              ))}
             </div>
 
             {/* Search Input */}
@@ -1034,36 +1019,26 @@ export default function App() {
                 <span className="w-2 h-2 rounded-full bg-blue-600" />
               )}
             </button>
+
+            {/* Primary + Nueva Tarea Button in Top Bar */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedTask(null);
+                setInitialStatusForNewTask('todo');
+                setInitialBoardForNewTask(currentBoardId === 'master' ? (boards[0]?.id || 'board-work') : currentBoardId);
+                setIsTaskModalOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer shrink-0 transition-all"
+              title="Añadir una nueva tarea"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Nueva Tarea</span>
+            </button>
           </div>
         </div>
 
         {/* View Component Rendering */}
-        {viewMode === 'kanban' && (
-          <KanbanBoard
-            tasks={filteredActiveTasks}
-            allTags={tags}
-            allBoards={boards}
-            allPriorities={priorities}
-            isMasterView={isMasterBoard}
-            onSelectTask={(task) => {
-              setSelectedTask(task);
-              setIsTaskModalOpen(true);
-            }}
-            onStatusChange={handleTaskStatusChange}
-            onAddTaskToColumn={(status) => {
-              const targetBoard = currentBoardId === 'master' ? (boards[0]?.id || 'board-work') : currentBoardId;
-              setSelectedTask(null);
-              setInitialStatusForNewTask(status);
-              setInitialBoardForNewTask(targetBoard);
-              setIsTaskModalOpen(true);
-            }}
-            filterColor={filterColor}
-            filterPriority={filterPriority}
-            filterType={filterType}
-            filterTag={filterTag}
-            searchQuery={searchQuery}
-          />
-        )}
 
         {viewMode === 'table' && (
           <TaskListView
@@ -1318,16 +1293,7 @@ export default function App() {
         </button>
 
         {/* Kanban */}
-        <button
-          type="button"
-          onClick={() => setViewMode('kanban')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all ${
-            viewMode === 'kanban' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <LayoutGrid className="w-4 h-4" />
-          <span>Kanban</span>
-        </button>
+
 
         {/* Calendario */}
         <button
@@ -1341,6 +1307,8 @@ export default function App() {
           <span>Calendario</span>
         </button>
       </nav>
+
+
 
       {/* Board Selection Modal */}
       <BoardSelectModal

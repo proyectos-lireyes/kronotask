@@ -364,7 +364,7 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                 key={q.id}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDropOn3x3Cell(e, q.id)}
-                className={`rounded-2xl border-2 ${q.borderColor} ${q.bgLight} p-3 flex flex-col min-h-[320px] transition-all shadow-xs`}
+                className={`rounded-2xl border-2 ${q.borderColor} bg-white dark:bg-slate-900 p-2.5 sm:p-3 flex flex-col min-h-[300px] transition-all shadow-2xs`}
               >
                 {/* Cell Header */}
                 <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200/80">

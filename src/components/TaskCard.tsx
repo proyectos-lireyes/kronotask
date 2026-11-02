@@ -104,7 +104,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       draggable
       onDragStart={(e) => onDragStart && onDragStart(e, task.id)}
       onClick={() => onSelect(task)}
-      className={`group relative rounded-xl border p-2.5 transition-all duration-200 hover:shadow-xs cursor-pointer select-none active:scale-[0.99] animate-in fade-in slide-in-from-bottom-3 duration-300 ${getCardColorClass()}`}
+      className={`group relative rounded-xl border p-1.5 sm:p-2 transition-all duration-150 hover:shadow-2xs cursor-pointer select-none active:scale-[0.99] animate-in fade-in slide-in-from-bottom-2 duration-200 ${getCardColorClass()}`}
       title="Toca para ver o editar la información completa"
     >
       {/* Top Row: Title + Quick Complete Button */}
@@ -171,35 +171,70 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       )}
 
-      {/* Bottom Row: Badges (Semáforo, Prioridad, Espera, Meta) */}
+      {/* Bottom Row: Aligned Grid Badges (Tiempo, Tablero, Criticidad) */}
       <div
-        className={`flex items-center justify-between gap-1.5 mt-2 pt-1.5 border-t text-[10px] ${
+        className={`flex items-center justify-between gap-1.5 mt-1.5 pt-1.5 border-t text-[10px] ${
           isBlack ? 'border-stone-800 text-stone-400' : 'border-slate-200/70 text-slate-500'
         }`}
       >
-        {/* Left tags / countdown */}
-        <div className="flex items-center gap-1 overflow-hidden flex-wrap">
-          {/* Semáforo Remaining Badge */}
-          <span
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-bold truncate max-w-[110px] ${timeCalc.badgeBg}`}
-            title={`Nivel ${timeCalc.label}: ${timeCalc.remainingText}`}
-          >
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-x-auto no-scrollbar">
+          {/* 1. Tiempo / Semáforo (Ancho Fijo 115px para alineación perfecta) */}
+          <div className="w-[115px] shrink-0">
             <span
-              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                timeCalc.isOverdue && !isDone
-                  ? 'bg-amber-400 animate-ping'
-                  : timeCalc.level === 'red'
-                  ? 'bg-rose-500 animate-pulse'
-                  : 'bg-current'
-              }`}
-            />
-            <span className="truncate">{timeCalc.remainingText}</span>
-          </span>
+              className={`w-full inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md font-bold text-[10px] truncate ${timeCalc.badgeBg}`}
+              title={`Nivel ${timeCalc.label}: ${timeCalc.remainingText}`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  timeCalc.isOverdue && !isDone
+                    ? 'bg-amber-400 animate-ping'
+                    : timeCalc.level === 'red'
+                    ? 'bg-rose-500 animate-pulse'
+                    : 'bg-current'
+                }`}
+              />
+              <span className="truncate">{timeCalc.remainingText}</span>
+            </span>
+          </div>
 
-          {/* En Espera Badge */}
+          {/* 2. Tablero / Etiqueta (Ancho Fijo 75px) */}
+          <div className="w-[75px] shrink-0">
+            {board ? (
+              <span
+                className="w-full inline-flex items-center justify-center px-1.5 py-0.5 rounded-md text-white font-bold text-[10px] truncate shadow-2xs"
+                style={{ backgroundColor: board.color || '#3b82f6' }}
+                title={`Tablero: ${board.name}`}
+              >
+                <span className="truncate">{board.name}</span>
+              </span>
+            ) : task.tags && task.tags.length > 0 ? (
+              <span
+                className="w-full inline-flex items-center justify-center px-1.5 py-0.5 rounded-md bg-blue-100/80 text-blue-800 font-bold text-[10px] truncate"
+                title={`Etiqueta: ${task.tags[0]}`}
+              >
+                <span className="truncate">#{task.tags[0]}</span>
+              </span>
+            ) : (
+              <span className="w-full inline-block" />
+            )}
+          </div>
+
+          {/* 3. Criticidad / Prioridad (Ancho Fijo 65px) */}
+          <div className="w-[65px] shrink-0">
+            <span
+              className={`w-full inline-flex items-center justify-center gap-0.5 px-1 py-0.5 rounded font-bold capitalize text-[10px] truncate ${
+                isBlack ? 'bg-stone-800 text-stone-300' : 'bg-slate-100 text-slate-700 border border-slate-200/80'
+              }`}
+            >
+              <Flag className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+              <span className="truncate">{task.priority}</span>
+            </span>
+          </div>
+
+          {/* Badges especiales opcionales (Espera / Fricción) */}
           {isWaiting && (
             <span
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-900 font-bold shrink-0"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-900 font-bold shrink-0 text-[9px]"
               title={`En espera máx 4 días: ${waitingRemainingText}`}
             >
               <Hourglass className="w-2.5 h-2.5 animate-spin" />
@@ -207,72 +242,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             </span>
           )}
 
-          {/* Recurrence Badge */}
-          {task.recurrence?.enabled && (
-            <span
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold shrink-0 text-[10px]"
-              title={`Tarea Periódica: ${formatRecurrenceLabel(task.recurrence)}`}
-            >
-              <Repeat className="w-2.5 h-2.5 text-indigo-600" />
-              <span>{formatRecurrenceLabel(task.recurrence)}</span>
-            </span>
-          )}
-
-          {/* Board Badge (if Master View) */}
-          {board && isMasterView && (
-            <span
-              className="px-1.5 py-0.5 rounded-md text-white font-bold truncate max-w-[70px] shadow-2xs"
-              style={{ backgroundColor: board.color }}
-              title={`Tablero: ${board.name}`}
-            >
-              {board.name}
-            </span>
-          )}
-
-          {/* Priority */}
-          <span
-            className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded font-semibold capitalize shrink-0 ${
-              isBlack ? 'bg-stone-800 text-stone-300' : 'bg-white/80 text-slate-700 border border-slate-200/60'
-            }`}
-          >
-            <Flag className="w-2.5 h-2.5 text-slate-400" />
-            <span className="truncate max-w-[55px]">{task.priority}</span>
-          </span>
-
-          {/* 3D Quadrant & Score Pill */}
-          {!isDone && (
-            <span
-              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-black text-[10px] shrink-0 ${
-                urgencyInfo.quadrantNumber <= 3
-                  ? 'bg-rose-100/90 text-rose-800 border border-rose-300/80'
-                  : urgencyInfo.quadrantNumber <= 6
-                  ? 'bg-amber-100/90 text-amber-900 border border-amber-300/80'
-                  : 'bg-slate-100 text-slate-700 border border-slate-200'
-              }`}
-              title={`Matriz Q${urgencyInfo.quadrantNumber}: ${urgencyInfo.score.toFixed(2)} pts (${urgencyInfo.isOverdue ? `${urgencyInfo.hoursOverdue.toFixed(1)}h vencida` : `${urgencyInfo.targetHours.toFixed(1)}h restantes`}, Criticidad C${urgencyInfo.criticidad})`}
-            >
-              Q{urgencyInfo.quadrantNumber} · {urgencyInfo.score.toFixed(2)} pts
-            </span>
-          )}
-
-          {/* Friction Badge if task was blocked previously */}
           {!isDone && !!task.frictionPoints && task.frictionPoints > 0 && (
             <span
               className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 shrink-0"
-              title={`Historial de Fricción: +${task.frictionPoints} pts acumulados por entrar a En Espera`}
+              title={`Historial de Fricción: +${task.frictionPoints} pts`}
             >
               🔒+{task.frictionPoints}
-            </span>
-          )}
-
-          {/* Primary Tag (if any) */}
-          {task.tags && task.tags.length > 0 && (
-            <span
-              className={`hidden sm:inline-block px-1.5 py-0.5 rounded font-medium truncate max-w-[65px] ${
-                isBlack ? 'bg-stone-800 text-sky-300' : 'bg-blue-100/70 text-blue-800'
-              }`}
-            >
-              #{task.tags[0]}
             </span>
           )}
         </div>
