@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TaskItem, Board } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
+import { isTaskOccurringOnDate } from '../utils/recurrence';
 import {
   ChevronLeft,
   ChevronRight,
@@ -75,18 +76,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   }
 
   const getTasksForDate = (date: Date) => {
-    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    const endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1;
-
-    return tasks.filter((t) => {
-      const taskEnd = new Date(t.endDate).getTime();
-      const taskStart = new Date(t.startDate).getTime();
-      return (
-        (taskEnd >= startOfDay && taskEnd <= endOfDay) ||
-        (taskStart >= startOfDay && taskStart <= endOfDay) ||
-        (taskStart <= startOfDay && taskEnd >= endOfDay)
-      );
-    });
+    return tasks.filter((t) => isTaskOccurringOnDate(t, date));
   };
 
   const isToday = (date: Date) => {

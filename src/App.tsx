@@ -83,6 +83,7 @@ import {
   Filter,
   Clock,
   Settings,
+  Settings2,
   X,
   Grid2x2,
 } from 'lucide-react';
@@ -963,24 +964,6 @@ export default function App() {
 
           {/* Action & Filter Controls */}
           <div className="flex items-center justify-between gap-2 w-full md:w-auto">
-            {/* Mobile-only View selector */}
-            <div className="md:hidden flex items-center gap-1 overflow-x-auto py-1">
-              {(['eisenhower', 'gantt', 'table', 'calendar', 'history'] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setViewMode(v)}
-                  className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer shrink-0 ${
-                    viewMode === v
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                      : 'bg-white text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <span className="capitalize">{v === 'eisenhower' ? '3x3 Matriz' : v}</span>
-                </button>
-              ))}
-            </div>
-
             {/* Search Input */}
             <div className="relative flex-1 md:w-56">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1020,20 +1003,14 @@ export default function App() {
               )}
             </button>
 
-            {/* Primary + Nueva Tarea Button in Top Bar */}
+            {/* Gear Button for Range Settings (Ajustar Rangos Q1 a Q9) */}
             <button
               type="button"
-              onClick={() => {
-                setSelectedTask(null);
-                setInitialStatusForNewTask('todo');
-                setInitialBoardForNewTask(currentBoardId === 'master' ? (boards[0]?.id || 'board-work') : currentBoardId);
-                setIsTaskModalOpen(true);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer shrink-0 transition-all"
-              title="Añadir una nueva tarea"
+              onClick={() => setIsQuadrantSettingsModalOpen(true)}
+              className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer shrink-0 flex items-center justify-center shadow-2xs"
+              title="Ajustar Rangos de Q1 a Q9"
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Nueva Tarea</span>
+              <Settings2 className="w-4 h-4 text-slate-600" />
             </button>
           </div>
         </div>
@@ -1305,6 +1282,24 @@ export default function App() {
         >
           <CalendarDays className="w-4 h-4" />
           <span>Calendario</span>
+        </button>
+
+        {/* Historial / Completadas */}
+        <button
+          type="button"
+          onClick={() => setViewMode('history')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-[10px] font-bold cursor-pointer transition-all relative ${
+            viewMode === 'history' ? 'text-blue-600 font-black bg-blue-50/80 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+          }`}
+          title="Ver tareas completadas e historial"
+        >
+          <History className="w-4 h-4" />
+          <span>Completadas</span>
+          {completedTasks.length > 0 && (
+            <span className="absolute -top-1 -right-1 px-1 py-0.2 rounded-full text-[9px] font-black bg-emerald-500 text-white shadow-2xs">
+              {completedTasks.length}
+            </span>
+          )}
         </button>
       </nav>
 

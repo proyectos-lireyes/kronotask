@@ -9,6 +9,9 @@ export interface RecurrenceRule {
   interval: number;
   unit: RecurrenceUnit;
   nextTriggerDate?: string;
+  endCondition?: 'never' | 'until_date' | 'count';
+  repeatUntilDate?: string;
+  repeatCount?: number;
 }
 
 export interface TaskAttachment {

@@ -328,30 +328,6 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Configuration Header Toolbar */}
-      <div className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex-wrap sm:flex-nowrap">
-        <div className="flex items-center gap-2 min-w-0">
-          <Settings2 className="w-4 h-4 text-blue-600 shrink-0" />
-          <span className="text-xs font-bold text-slate-800 truncate">
-            Rangos: <span className="font-extrabold text-rose-700">Q1 &lt; {quadrantConfig.q1Days}d</span> ·{' '}
-            <span className="font-extrabold text-amber-700">Q2 {quadrantConfig.q2UseNextSunday ? 'Sig. Dom' : `< ${quadrantConfig.q2CustomDays}d`}</span> ·{' '}
-            <span className="font-extrabold text-blue-700">Q3 &lt; {quadrantConfig.q3DaysPostSunday}d post-Dom</span> ·{' '}
-            <span className="font-extrabold text-orange-700">Q4 &lt; {quadrantConfig.q4DaysPostSunday}d post-Dom</span>
-          </span>
-        </div>
-        {onOpenQuadrantSettings && (
-          <button
-            type="button"
-            onClick={onOpenQuadrantSettings}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors cursor-pointer"
-            title="Personalizar rangos de tiempo de cada cuadrante (Q1 a Q9)"
-          >
-            <Settings2 className="w-3.5 h-3.5" />
-            <span>Ajustar Rangos de Q1-Q9</span>
-          </button>
-        )}
-      </div>
-
       {/* 3x3 GRID CONTAINER */}
       <div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -364,7 +340,7 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                 key={q.id}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDropOn3x3Cell(e, q.id)}
-                className={`rounded-2xl border-2 ${q.borderColor} bg-white dark:bg-slate-900 p-2.5 sm:p-3 flex flex-col min-h-[300px] transition-all shadow-2xs`}
+                className={`rounded-2xl border-2 ${q.borderColor} bg-white dark:bg-slate-900 p-2 sm:p-2.5 flex flex-col min-h-[60px] max-w-full resize-y overflow-auto transition-all shadow-2xs relative group`}
               >
                 {/* Cell Header */}
                 <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200/80">
@@ -384,7 +360,7 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                 </div>
 
                 {/* Task List */}
-                <div className="space-y-2 flex-1 overflow-y-auto max-h-[420px] pr-0.5">
+                <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[420px] pr-0.5">
                   {cellTasks.length === 0 ? (
                     <div className="h-32 flex flex-col items-center justify-center text-center p-3 border-2 border-dashed border-slate-200/80 rounded-xl bg-white/40 text-slate-400">
                       <IconComp className="w-6 h-6 mb-1 opacity-30 text-slate-400" />
