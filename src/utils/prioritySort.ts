@@ -162,33 +162,48 @@ export function getQuadrantForTask(
   const msInQ7 = (config.q7DaysPostSunday || 15) * 24 * 60 * 60 * 1000;
   const msInQ8 = (config.q8DaysPostSunday || 30) * 24 * 60 * 60 * 1000;
 
-  if (!isStarted) {
-    // Planificación
-    const q6End = config.q6UseNextSunday
-      ? nextSundayEnd
-      : nowMs + (config.q6CustomDays || 7) * 24 * 60 * 60 * 1000;
+  const daysUntilEnd = (endMs - nowMs) / (1000 * 60 * 60 * 24);
+  const isOverdue = nowMs >= endMs;
 
-    if (startMs <= q6End) return 6;
-    if (startMs <= nextSundayEnd + msInQ7) return 7;
-    if (startMs <= nextSundayEnd + msInQ8) return 8;
-    return 9;
-  } else {
-    // Ejecución
-    const daysUntilEnd = (endMs - nowMs) / (1000 * 60 * 60 * 24);
-    const isOverdue = nowMs >= endMs;
+  const q2End = config.q2UseNextSunday
+    ? nextSundayEnd
+    : nowMs + (config.q2CustomDays || 7) * 24 * 60 * 60 * 1000;
 
-    const q2End = config.q2UseNextSunday
-      ? nextSundayEnd
-      : nowMs + (config.q2CustomDays || 7) * 24 * 60 * 60 * 1000;
-    const q3End = nextSundayEnd + (config.q3DaysPostSunday || 15) * 24 * 60 * 60 * 1000;
-    const q4End = nextSundayEnd + (config.q4DaysPostSunday || 30) * 24 * 60 * 60 * 1000;
+  const q3End = config.q2UseNextSunday
+    ? nextSundayEnd + (config.q3DaysPostSunday || 15) * 24 * 60 * 60 * 1000
+    : nowMs + (config.q3DaysPostSunday || 15) * 24 * 60 * 60 * 1000;
 
-    if (isOverdue || daysUntilEnd < (config.q1Days || 4)) return 1;
-    if (endMs <= q2End) return 2;
-    if (endMs <= q3End) return 3;
-    if (endMs <= q4End) return 4;
-    return 5;
-  }
+  const q4End = config.q2UseNextSunday
+    ? nextSundayEnd + (config.q4DaysPostSunday || 30) * 24 * 60 * 60 * 1000
+    : nowMs + (config.q4DaysPostSunday || 30) * 24 * 60 * 60 * 1000;
+
+  // 1. Evaluamos criterios de fecha de entrega (Q1 a Q4)
+  if (isOverdue || daysUntilEnd < (config.q1Days || 4)) return 1;
+  if (endMs <= q2End) return 2;
+  if (endMs <= q3End) return 3;
+  if (endMs <= q4End) return 4;
+
+  // 2. Si la entrega es a más largo plazo que Q4:
+  // Si ya inició o está en progreso -> Q5 (Ejecución a Largo Plazo)
+  if (isStarted) return 5;
+
+  // Si no ha iniciado, clasificamos por fecha de inicio (Planificación: Q6 a Q9)
+  const q6End = config.q6UseNextSunday
+    ? nextSundayEnd
+    : nowMs + (config.q6CustomDays || 7) * 24 * 60 * 60 * 1000;
+
+  const q7End = config.q6UseNextSunday
+    ? nextSundayEnd + msInQ7
+    : nowMs + msInQ7;
+
+  const q8End = config.q6UseNextSunday
+    ? nextSundayEnd + msInQ8
+    : nowMs + msInQ8;
+
+  if (startMs <= q6End) return 6;
+  if (startMs <= q7End) return 7;
+  if (startMs <= q8End) return 8;
+  return 9;
 }
 
 export interface QuadrantColorStyle {
@@ -347,7 +362,9 @@ export function calculateTaskUrgencyInfo(
   const quadrantNumber = getQuadrantForTask(task, now, config);
 
   // Target hours / remaining hours calculation
-  const targetHours = isStarted
+  // En cuadrantes de ejecución (Q1 a Q5), el tiempo objetivo es hasta la fecha fin (entrega)
+  // En cuadrantes de planificación (Q6 a Q9), el tiempo objetivo es hasta la fecha inicio
+  const targetHours = quadrantNumber <= 5
     ? (endMs - now) / (1000 * 60 * 60)
     : (startMs - now) / (1000 * 60 * 60);
 

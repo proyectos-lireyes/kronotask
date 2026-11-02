@@ -101,12 +101,14 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
 
   const q2EndText = formData.q2UseNextSunday ? 'Siguiente Domingo' : `${formData.q2CustomDays}d`;
   const q6EndText = formData.q6UseNextSunday ? 'Siguiente Domingo' : `${formData.q6CustomDays}d`;
+  const q3Suffix = formData.q2UseNextSunday ? ' post-Dom' : '';
+  const q6Suffix = formData.q6UseNextSunday ? ' post-Dom' : '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-xs p-1.5 sm:p-3 md:p-5 overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-6xl rounded-2xl bg-white p-3.5 sm:p-5 md:p-6 shadow-2xl border border-slate-200 my-2 sm:my-4 max-h-[95vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-xs p-1 sm:p-3 md:p-4 overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative w-full max-w-[96vw] lg:max-w-7xl rounded-2xl bg-white p-3 sm:p-5 md:p-6 shadow-2xl border border-slate-200 my-1 sm:my-3 max-h-[96vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200 shrink-0">
+        <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-2 sm:gap-2.5">
             <div className="p-1.5 sm:p-2 rounded-xl bg-blue-50 text-blue-600 shrink-0">
               <Settings2 className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -126,19 +128,14 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleFormSubmit} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1 min-h-0">
+        <form onSubmit={handleFormSubmit} className="mt-3 space-y-3.5 overflow-y-auto pr-1 flex-1 min-h-0">
           {/* SECCIÓN 1: ZONA DE EJECUCIÓN (Q1 A Q5) */}
-          <div className="p-3 sm:p-4 rounded-xl bg-rose-50/50 border border-rose-200 space-y-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4 text-rose-600 shrink-0" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-rose-900">
-                  Zona de Ejecución: Tareas que ya iniciaron (Q1 a Q5)
-                </h3>
-              </div>
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 shrink-0">
-                Cadena Encadenada (Q1 → Q5)
-              </span>
+          <div className="p-3 sm:p-4 rounded-xl bg-rose-50/50 border border-rose-200 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-rose-600 shrink-0" />
+              <h3 className="text-xs font-black uppercase tracking-wider text-rose-900">
+                Zona de Ejecución: Tareas por Fecha de Entrega (Q1 a Q5)
+              </h3>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 pt-1">
@@ -242,11 +239,11 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                       onChange={(e) => handleQ3DaysChange(parseInt(e.target.value, 10))}
                       className="w-16 px-2 py-1 rounded-lg border border-slate-300 text-xs font-black text-center focus:ring-2 focus:ring-rose-500 focus:outline-hidden"
                     />
-                    <span className="text-[11px] text-slate-500 font-semibold">días post-Dom</span>
+                    <span className="text-[11px] text-slate-500 font-semibold">días{q3Suffix}</span>
                   </div>
                 </div>
                 <div className="pt-2 border-t border-slate-100 text-[10px] font-bold text-blue-800 bg-blue-50/50 p-1.5 rounded-md">
-                  Q3: Desde {q2EndText} hasta {formData.q3DaysPostSunday}d post-Dom
+                  Q3: Desde {q2EndText} hasta {formData.q3DaysPostSunday}d{q3Suffix}
                 </div>
               </div>
 
@@ -258,7 +255,7 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                     <label className="text-xs font-bold text-slate-900">4. Entrega Intermedia</label>
                   </div>
                   <p className="text-[10px] font-semibold text-slate-500 mb-1">
-                    Desde {formData.q3DaysPostSunday}d post-Dom (Fin de Q3) hasta:
+                    Desde {formData.q3DaysPostSunday}d{q3Suffix} (Fin de Q3) hasta:
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <input
@@ -269,11 +266,11 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                       onChange={(e) => handleQ4DaysChange(parseInt(e.target.value, 10))}
                       className="w-16 px-2 py-1 rounded-lg border border-slate-300 text-xs font-black text-center focus:ring-2 focus:ring-rose-500 focus:outline-hidden"
                     />
-                    <span className="text-[11px] text-slate-500 font-semibold">días post-Dom</span>
+                    <span className="text-[11px] text-slate-500 font-semibold">días{q3Suffix}</span>
                   </div>
                 </div>
                 <div className="pt-2 border-t border-slate-100 text-[10px] font-bold text-orange-800 bg-orange-50/50 p-1.5 rounded-md">
-                  Q4: Desde {formData.q3DaysPostSunday}d hasta {formData.q4DaysPostSunday}d post-Dom
+                  Q4: Desde {formData.q3DaysPostSunday}d hasta {formData.q4DaysPostSunday}d{q3Suffix}
                 </div>
               </div>
 
@@ -285,28 +282,23 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                     <label className="text-xs font-bold text-slate-900">5. Entrega a Largo Plazo</label>
                   </div>
                   <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                    Depende directamente del límite de Q4. Agrupa automáticamente todas las tareas activas cuya fecha de entrega sea superior a {formData.q4DaysPostSunday} días post-domingo.
+                    Depende directamente del límite de Q4. Agrupa automáticamente todas las tareas activas cuya fecha de entrega sea superior a {formData.q4DaysPostSunday} días{q3Suffix}.
                   </p>
                 </div>
                 <div className="pt-2 border-t border-slate-100 text-[10px] font-bold text-yellow-900 bg-yellow-50/80 p-1.5 rounded-md">
-                  Q5: Más de {formData.q4DaysPostSunday}d post-Dom (Fin de Q4 en adelante)
+                  Q5: Más de {formData.q4DaysPostSunday}d{q3Suffix} (Fin de Q4 en adelante)
                 </div>
               </div>
             </div>
           </div>
 
           {/* SECCIÓN 2: ZONA DE PLANIFICACIÓN (Q6 A Q9) */}
-          <div className="p-3 sm:p-4 rounded-xl bg-sky-50/50 border border-sky-200 space-y-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Compass className="w-4 h-4 text-sky-600 shrink-0" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-sky-900">
-                  Zona de Planificación: Fechas de Inicio (Q6 a Q9)
-                </h3>
-              </div>
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 shrink-0">
-                Arranques Consecutivos (Q6 → Q9)
-              </span>
+          <div className="p-3 sm:p-4 rounded-xl bg-sky-50/50 border border-sky-200 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Compass className="w-4 h-4 text-sky-600 shrink-0" />
+              <h3 className="text-xs font-black uppercase tracking-wider text-sky-900">
+                Zona de Planificación: Fechas de Inicio (Q6 a Q9)
+              </h3>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
@@ -382,11 +374,11 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                       onChange={(e) => handleQ7DaysChange(parseInt(e.target.value, 10))}
                       className="w-16 px-2 py-1 rounded-lg border border-slate-300 text-xs font-black text-center focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
                     />
-                    <span className="text-[11px] text-slate-500 font-semibold">días post-Dom</span>
+                    <span className="text-[11px] text-slate-500 font-semibold">días{q6Suffix}</span>
                   </div>
                 </div>
                 <div className="pt-2 border-t border-slate-100 text-[10px] font-bold text-stone-800 bg-stone-100/60 p-1.5 rounded-md">
-                  Q7: Desde {q6EndText} hasta {formData.q7DaysPostSunday}d post-Dom
+                  Q7: Desde {q6EndText} hasta {formData.q7DaysPostSunday}d{q6Suffix}
                 </div>
               </div>
 
@@ -398,7 +390,7 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                     <label className="text-xs font-bold text-slate-900">8. En Cola</label>
                   </div>
                   <p className="text-[10px] font-semibold text-slate-500 mb-1">
-                    Desde {formData.q7DaysPostSunday}d post-Dom (Fin de Q7) hasta:
+                    Desde {formData.q7DaysPostSunday}d{q6Suffix} (Fin de Q7) hasta:
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <input
@@ -409,11 +401,11 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                       onChange={(e) => handleQ8DaysChange(parseInt(e.target.value, 10))}
                       className="w-16 px-2 py-1 rounded-lg border border-slate-300 text-xs font-black text-center focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
                     />
-                    <span className="text-[11px] text-slate-500 font-semibold">días post-Dom</span>
+                    <span className="text-[11px] text-slate-500 font-semibold">días{q6Suffix}</span>
                   </div>
                 </div>
                 <div className="pt-2 border-t border-slate-100 text-[10px] font-bold text-slate-800 bg-slate-100/60 p-1.5 rounded-md">
-                  Q8: Desde {formData.q7DaysPostSunday}d hasta {formData.q8DaysPostSunday}d post-Dom
+                  Q8: Desde {formData.q7DaysPostSunday}d hasta {formData.q8DaysPostSunday}d{q6Suffix}
                 </div>
               </div>
 
@@ -425,11 +417,11 @@ export const QuadrantSettingsModal: React.FC<QuadrantSettingsModalProps> = ({
                     <label className="text-xs font-bold text-slate-900">9. Planificación Lejana</label>
                   </div>
                   <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                    Depende del límite de Q8. Agrupa tareas no iniciadas con fecha de inicio a más de {formData.q8DaysPostSunday} días post-domingo.
+                    Depende del límite de Q8. Agrupa tareas no iniciadas con fecha de inicio a más de {formData.q8DaysPostSunday} días{q6Suffix}.
                   </p>
                 </div>
                 <div className="pt-2 border-t border-slate-100 text-[10px] font-bold text-slate-700 bg-slate-100/60 p-1.5 rounded-md">
-                  Q9: Más de {formData.q8DaysPostSunday}d post-Dom (Fin de Q8 en adelante)
+                  Q9: Más de {formData.q8DaysPostSunday}d{q6Suffix} (Fin de Q8 en adelante)
                 </div>
               </div>
             </div>

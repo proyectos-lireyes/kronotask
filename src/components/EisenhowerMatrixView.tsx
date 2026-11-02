@@ -66,6 +66,15 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
     ? 'el Siguiente Domingo'
     : `${config.q6CustomDays || 7} días`;
 
+  const q3End = config.q3DaysPostSunday || 15;
+  const q4End = config.q4DaysPostSunday || 30;
+  const q7End = config.q7DaysPostSunday || 15;
+  const q8End = config.q8DaysPostSunday || 30;
+
+  // Suffixes based on Sunday vs Fixed Days mode
+  const q3Suffix = config.q2UseNextSunday ? ' post-Dom' : '';
+  const q6Suffix = config.q6UseNextSunday ? ' post-Dom' : '';
+
   return [
     // Fila 1: Urgencia Extrema & Corto Plazo (Q1, Q2, Q3)
     {
@@ -76,7 +85,7 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
       uLevel: 'high',
       rowTitle: 'Fila 1: Crisis & Alta Urgencia',
       colTitle: 'Columna 1: Urgencia Extrema',
-      title: `Q1: Entrega < ${q1Days}d / Vencidas`,
+      title: `Q1: Vencidas y < ${q1Days}d`,
       action: 'Atender Ahora Mismo',
       subtitle: `Vencidas o menos de ${q1Days} días para la entrega`,
       icon: Flame,
@@ -94,7 +103,7 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
       uLevel: 'medium',
       rowTitle: 'Fila 1: Crisis & Alta Urgencia',
       colTitle: 'Columna 2: Inminencia',
-      title: 'Q2: Termina Esta Semana',
+      title: `Q2: Desde ${q1Days}d hasta ${q2EndText}`,
       action: 'Completar Esta Semana',
       subtitle: `Entre ${q1Days} días y ${q2EndFullText}`,
       icon: Zap,
@@ -107,14 +116,14 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
     {
       id: 'q3',
       quadrantNumber: 3,
-      scoreRange: `${q2EndText} a ${config.q3DaysPostSunday || 15}d`,
+      scoreRange: `${q2EndText} a ${q3End}d`,
       pLevel: 'high',
       uLevel: 'low',
       rowTitle: 'Fila 1: Crisis & Alta Urgencia',
       colTitle: 'Columna 3: Recta Final',
-      title: `Q3: Termina en ${config.q3DaysPostSunday || 15}d`,
+      title: `Q3: Desde ${q2EndText} hasta ${q3End}d${q3Suffix}`,
       action: 'Destrabar y Avanzar',
-      subtitle: `Entre ${q2EndFullText} y ${config.q3DaysPostSunday || 15} días post-domingo`,
+      subtitle: `Entre ${q2EndFullText} y ${q3End} días${q3Suffix}`,
       icon: CalendarCheck,
       accentColor: 'text-blue-600',
       borderColor: 'border-blue-300',
@@ -127,14 +136,14 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
     {
       id: 'q4',
       quadrantNumber: 4,
-      scoreRange: `${config.q3DaysPostSunday || 15}d a ${config.q4DaysPostSunday || 30}d`,
+      scoreRange: `${q3End}d a ${q4End}d`,
       pLevel: 'medium',
       uLevel: 'high',
       rowTitle: 'Fila 2: Zona de Ejecución',
       colTitle: 'Columna 1: Consumo Alto',
-      title: `Q4: Termina en ${config.q3DaysPostSunday || 15}d a ${config.q4DaysPostSunday || 30}d`,
+      title: `Q4: Desde ${q3End}d hasta ${q4End}d${q3Suffix}`,
       action: 'Avanzar sin Demoras',
-      subtitle: `Entre ${config.q3DaysPostSunday || 15}d y ${config.q4DaysPostSunday || 30}d post-domingo`,
+      subtitle: `Entre ${q3End}d y ${q4End}d${q3Suffix}`,
       icon: Clock,
       accentColor: 'text-orange-600',
       borderColor: 'border-orange-300',
@@ -145,14 +154,14 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
     {
       id: 'q5',
       quadrantNumber: 5,
-      scoreRange: `> ${config.q4DaysPostSunday || 30}d`,
+      scoreRange: `> ${q4End}d`,
       pLevel: 'medium',
       uLevel: 'medium',
       rowTitle: 'Fila 2: Zona de Ejecución',
       colTitle: 'Columna 2: Núcleo Activo',
-      title: `Q5: Termina en +${config.q4DaysPostSunday || 30}d`,
+      title: `Q5: Más de ${q4End}d${q3Suffix}`,
       action: 'Mantener Ritmo Constante',
-      subtitle: `Más de ${config.q4DaysPostSunday || 30} días post-domingo`,
+      subtitle: `Más de ${q4End} días${q3Suffix}`,
       icon: ArrowRight,
       accentColor: 'text-yellow-800',
       borderColor: 'border-yellow-300',
@@ -168,7 +177,7 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
       uLevel: 'low',
       rowTitle: 'Fila 2: Zona de Ejecución',
       colTitle: 'Columna 3: Recién Iniciada',
-      title: 'Q6: Inicia Esta Semana (Pre-Q2)',
+      title: `Q6: Inicia antes de ${q6EndText}`,
       action: 'Puerta de Entrada',
       subtitle: `Inicia antes de ${q6EndFullText}`,
       icon: Users,
@@ -183,14 +192,14 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
     {
       id: 'q7',
       quadrantNumber: 7,
-      scoreRange: `${q6EndText} a ${config.q7DaysPostSunday || 15}d`,
+      scoreRange: `${q6EndText} a ${q7End}d`,
       pLevel: 'low',
       uLevel: 'high',
       rowTitle: 'Fila 3: Zona de Planificación',
       colTitle: 'Columna 1: Arranque Inminente',
-      title: `Q7: Inicia en ${config.q7DaysPostSunday || 15}d`,
+      title: `Q7: Desde ${q6EndText} hasta ${q7End}d${q6Suffix}`,
       action: 'Preparar para Iniciar',
-      subtitle: `Inicia entre ${q6EndFullText} y ${config.q7DaysPostSunday || 15} días post-domingo`,
+      subtitle: `Inicia entre ${q6EndFullText} y ${q7End} días${q6Suffix}`,
       icon: AlertTriangle,
       accentColor: 'text-stone-700',
       borderColor: 'border-stone-300',
@@ -201,14 +210,14 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
     {
       id: 'q8',
       quadrantNumber: 8,
-      scoreRange: `${config.q7DaysPostSunday || 15}d a ${config.q8DaysPostSunday || 30}d`,
+      scoreRange: `${q7End}d a ${q8End}d`,
       pLevel: 'low',
       uLevel: 'medium',
       rowTitle: 'Fila 3: Zona de Planificación',
       colTitle: 'Columna 2: En Cola',
-      title: `Q8: Inicia en ${config.q7DaysPostSunday || 15}d a ${config.q8DaysPostSunday || 30}d`,
+      title: `Q8: Desde ${q7End}d hasta ${q8End}d${q6Suffix}`,
       action: 'Revisar Requisitos',
-      subtitle: `Inicia entre ${config.q7DaysPostSunday || 15}d y ${config.q8DaysPostSunday || 30}d post-domingo`,
+      subtitle: `Inicia entre ${q7End}d y ${q8End}d${q6Suffix}`,
       icon: Archive,
       accentColor: 'text-slate-600',
       borderColor: 'border-slate-300',
@@ -219,14 +228,14 @@ export function getQuadrants3x3(config: QuadrantConfig = DEFAULT_QUADRANT_CONFIG
     {
       id: 'q9',
       quadrantNumber: 9,
-      scoreRange: `> ${config.q8DaysPostSunday || 30}d`,
+      scoreRange: `> ${q8End}d`,
       pLevel: 'low',
       uLevel: 'low',
       rowTitle: 'Fila 3: Zona de Planificación',
       colTitle: 'Columna 3: Planificación Inicial',
-      title: `Q9: Inicia en +${config.q8DaysPostSunday || 30}d`,
+      title: `Q9: Más de ${q8End}d${q6Suffix}`,
       action: 'Agendar / Definir',
-      subtitle: `Inicia a más de ${config.q8DaysPostSunday || 30} días post-domingo`,
+      subtitle: `Inicia a más de ${q8End} días${q6Suffix}`,
       icon: Trash2,
       accentColor: 'text-slate-500',
       borderColor: 'border-slate-200',
@@ -320,12 +329,14 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
   return (
     <div className="space-y-3">
       {/* Configuration Header Toolbar */}
-      <div className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 min-w-0">
           <Settings2 className="w-4 h-4 text-blue-600 shrink-0" />
-          <span className="text-xs font-bold text-slate-800">
-            Reglas de Tiempo Matriz: <span className="font-extrabold text-blue-700">Q1 &lt; {quadrantConfig.q1Days}d</span> ·{' '}
-            <span className="font-extrabold text-amber-700">Q2 {quadrantConfig.q2UseNextSunday ? 'Sig. Domingo' : `< ${quadrantConfig.q2CustomDays}d`}</span>
+          <span className="text-xs font-bold text-slate-800 truncate">
+            Rangos: <span className="font-extrabold text-rose-700">Q1 &lt; {quadrantConfig.q1Days}d</span> ·{' '}
+            <span className="font-extrabold text-amber-700">Q2 {quadrantConfig.q2UseNextSunday ? 'Sig. Dom' : `< ${quadrantConfig.q2CustomDays}d`}</span> ·{' '}
+            <span className="font-extrabold text-blue-700">Q3 &lt; {quadrantConfig.q3DaysPostSunday}d post-Dom</span> ·{' '}
+            <span className="font-extrabold text-orange-700">Q4 &lt; {quadrantConfig.q4DaysPostSunday}d post-Dom</span>
           </span>
         </div>
         {onOpenQuadrantSettings && (
@@ -356,51 +367,19 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                 className={`rounded-2xl border-2 ${q.borderColor} ${q.bgLight} p-3 flex flex-col min-h-[320px] transition-all shadow-xs`}
               >
                 {/* Cell Header */}
-                <div className="flex items-start justify-between gap-2 mb-2.5 pb-2 border-b border-slate-200/80">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded-xl bg-white shadow-2xs ${q.accentColor}`}>
+                <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200/80">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`p-1.5 rounded-xl bg-white shadow-2xs shrink-0 ${q.accentColor}`}>
                       <IconComp className="w-4 h-4" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${q.badgeBg} ${q.badgeText} shadow-2xs`}>
-                          Q{q.quadrantNumber}
-                        </span>
-                        <h3 className="text-xs sm:text-sm font-black text-slate-900">{q.title}</h3>
-                        <span
-                          className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${q.badgeBg} ${q.badgeText} shadow-2xs`}
-                        >
-                          {cellTasks.length}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-white/90 text-slate-700 border border-slate-200/80">
-                          {q.scoreRange}
-                        </span>
-                        <p className={`text-[10px] font-bold ${q.accentColor}`}>{q.action}</p>
-                      </div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h3 className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                        {q.title}
+                      </h3>
+                      <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${q.badgeBg} ${q.badgeText} shadow-2xs shrink-0`}>
+                        {cellTasks.length}
+                      </span>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    {onOpenQuadrantSettings && (
-                      <button
-                        type="button"
-                        onClick={onOpenQuadrantSettings}
-                        className="p-1 hover:bg-white text-slate-400 hover:text-slate-700 rounded-lg transition-all cursor-pointer shadow-2xs border border-transparent hover:border-slate-200 shrink-0"
-                        title={`Ajustar rango de tiempo de Q${q.quadrantNumber}`}
-                      >
-                        <Settings2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onAddTaskToQuadrant(q.quadrantNumber)}
-                      className="p-1 hover:bg-white text-slate-500 hover:text-blue-600 rounded-lg transition-all cursor-pointer shadow-2xs border border-transparent hover:border-slate-200 shrink-0"
-                      title={`Agregar tarea en ${q.title}`}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
 

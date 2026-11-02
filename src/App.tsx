@@ -208,10 +208,7 @@ export default function App() {
         }
       },
       () => {
-        const stored = getStoredUserProfile();
-        if (!stored) {
-          setCurrentUser(null);
-        }
+        setCurrentUser(null);
       }
     );
     return () => unsubscribe();

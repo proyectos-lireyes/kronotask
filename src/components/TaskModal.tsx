@@ -1161,6 +1161,23 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                           </button>
                         ))}
                       </div>
+
+                      {/* Explanation Box for Cycle Evaluation */}
+                      <div className="col-span-2 mt-2 p-3 bg-indigo-100/60 rounded-xl border border-indigo-200 text-xs text-indigo-950 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-indigo-900">
+                          <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                          ¿Cómo saber si cumpliste a tiempo este ciclo?
+                        </p>
+                        <p className="text-[11px] leading-relaxed text-indigo-900">
+                          1. <strong>Comprobación de fecha:</strong> Al marcar como completada esta tarea, la app comparará tu fecha real de entrega contra el límite del ciclo actual (<strong>{new Date(endDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</strong>).
+                        </p>
+                        <p className="text-[11px] leading-relaxed text-indigo-900">
+                          2. <strong>Evaluación en Historial:</strong> Si la entregas el {new Date(endDate).toLocaleDateString([], { month: 'short', day: 'numeric' })} o antes, se archivará como <span className="font-extrabold text-emerald-700">✅ A tiempo</span>. Si se pasa de la fecha límite, se registrará como <span className="font-extrabold text-rose-700">🚨 Con retraso</span>.
+                        </p>
+                        <p className="text-[11px] leading-relaxed text-indigo-900">
+                          3. <strong>Siguiente Periodo:</strong> Automáticamente se abrirá el ciclo del siguiente periodo para seguir tu hábito sin perder la historia del mes anterior.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>

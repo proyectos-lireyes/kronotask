@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { TaskItem, CustomTag, Board } from '../types';
-import { CheckCircle2, RotateCcw, Calendar, Search, Tag, Clock, ArrowUpRight } from 'lucide-react';
+import { formatRecurrenceLabel } from '../utils/recurrence';
+import {
+  CheckCircle2,
+  RotateCcw,
+  Calendar,
+  Search,
+  Tag,
+  Clock,
+  Repeat,
+  Info,
+  Filter,
+} from 'lucide-react';
 
 interface HistoryViewProps {
   completedTasks: TaskItem[];
@@ -20,8 +31,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onReopenTask,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterMode, setFilterMode] = useState<'all' | 'recurring' | 'single'>('all');
 
   const filtered = completedTasks.filter((t) => {
+    if (filterMode === 'recurring' && !t.recurrence?.enabled) return false;
+    if (filterMode === 'single' && t.recurrence?.enabled) return false;
+
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -37,9 +52,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     return completed <= end;
   }).length;
 
-  const onTimePercent = completedTasks.length > 0
-    ? Math.round((onTimeCount / completedTasks.length) * 100)
-    : 100;
+  const onTimePercent =
+    completedTasks.length > 0 ? Math.round((onTimeCount / completedTasks.length) * 100) : 100;
+
+  const recurringCount = completedTasks.filter((t) => t.recurrence?.enabled).length;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs space-y-4 p-4 sm:p-6">
@@ -51,9 +67,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Historial de Tareas Completadas</h2>
+              <h2 className="text-base font-bold text-slate-900">Historial & Evaluación de Cumplimiento</h2>
               <p className="text-xs text-slate-500">
-                Registro histórico separado del tablero activo para mantener el foco de trabajo
+                Registro con evidencia de entrega (A tiempo vs. Con retraso) para tareas periódicas y únicas
               </p>
             </div>
           </div>
@@ -63,7 +79,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         <div className="flex items-center gap-2">
           <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center">
             <span className="text-xs font-black text-slate-800">{completedTasks.length}</span>
-            <span className="text-[10px] text-slate-500 block">Archivadas</span>
+            <span className="text-[10px] text-slate-500 block">Total</span>
+          </div>
+          <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
+            <span className="text-xs font-black text-indigo-700">{recurringCount}</span>
+            <span className="text-[10px] text-indigo-800 block">Periódicas</span>
           </div>
           <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
             <span className="text-xs font-black text-emerald-700">{onTimePercent}%</span>
@@ -72,16 +92,69 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       </div>
 
-      {/* Search Input */}
-      <div className="relative max-w-md">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Buscar en el historial..."
-          className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900"
-        />
+      {/* Info Banner on Periodic Task Compliance */}
+      <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-start gap-2 text-xs text-indigo-900">
+        <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+        <div className="space-y-0.5">
+          <p className="font-bold text-indigo-950">
+            ¿Cómo saber si cumpliste a tiempo una tarea mensual o periódica?
+          </p>
+          <p className="text-[11px] leading-relaxed text-indigo-800">
+            Cada vez que completas un ciclo (mensual, semanal, etc.), la aplicación compara la fecha/hora real de entrega (<strong className="text-indigo-950">Entregada</strong>) contra el límite asignado para ese mes (<strong className="text-indigo-950">Límite</strong>). Si la entregaste antes del límite queda marcada como <span className="font-bold text-emerald-700">A tiempo</span>; si la entregaste después, queda registrada como <span className="font-bold text-rose-700">Con retraso</span>, mientras el sistema crea automáticamente el siguiente ciclo.
+          </p>
+        </div>
+      </div>
+
+      {/* Search & Filter Controls */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        <div className="relative max-w-md flex-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar en el historial..."
+            className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900"
+          />
+        </div>
+
+        {/* Filter Toggle: All vs Periodic vs Single */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold shrink-0">
+          <button
+            type="button"
+            onClick={() => setFilterMode('all')}
+            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              filterMode === 'all'
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Todas ({completedTasks.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('recurring')}
+            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+              filterMode === 'recurring'
+                ? 'bg-white text-indigo-700 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Repeat className="w-3 h-3 text-indigo-600" />
+            <span>Periódicas ({recurringCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('single')}
+            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              filterMode === 'single'
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Únicas ({completedTasks.length - recurringCount})
+          </button>
+        </div>
       </div>
 
       {/* History List */}
@@ -97,6 +170,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             const end = new Date(task.endDate).getTime();
             const completed = task.completedAt ? new Date(task.completedAt).getTime() : Date.now();
             const wasOnTime = completed <= end;
+            const diffHours = Math.abs(completed - end) / (1000 * 60 * 60);
 
             const taskBoard = allBoards?.find((b) => b.id === task.boardId);
 
@@ -111,11 +185,21 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
 
-                  <div className="truncate">
-                    <div className="flex items-center gap-2">
+                  <div className="truncate space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-slate-800 group-hover:text-blue-600 transition-colors truncate">
                         {task.title}
                       </span>
+
+                      {/* Recurrence Badge */}
+                      {task.recurrence?.enabled && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <Repeat className="w-3 h-3 text-indigo-600" />
+                          <span>{formatRecurrenceLabel(task.recurrence)}</span>
+                        </span>
+                      )}
+
+                      {/* Master Board Badge */}
                       {isMasterView && taskBoard && (
                         <span
                           className="text-[10px] font-bold px-2 py-0.5 rounded-md text-white shadow-2xs"
@@ -124,6 +208,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           {taskBoard.name}
                         </span>
                       )}
+
+                      {/* Result Badge */}
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           wasOnTime
@@ -131,24 +217,23 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                             : 'bg-rose-50 text-rose-700 border border-rose-200'
                         }`}
                       >
-                        {wasOnTime ? 'A tiempo' : 'Con retraso'}
+                        {wasOnTime ? '✅ A tiempo' : `🚨 Con retraso (${diffHours > 24 ? `${Math.round(diffHours / 24)}d tardíos` : `${Math.round(diffHours)}h tardías`})`}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-0.5">
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-400" />
-                        Completada el:{' '}
-                        {task.completedAt
-                          ? new Date(task.completedAt).toLocaleDateString([], {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        Límite: {new Date(task.endDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{' '}
+                        {new Date(task.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+
+                      <span className="flex items-center gap-1 font-medium text-slate-700">
+                        <Clock className="w-3 h-3 text-emerald-600" />
+                        Entregada: {task.completedAt
+                          ? `${new Date(task.completedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} ${new Date(task.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                           : 'Fecha no registrada'}
                       </span>
-                      <span className="capitalize">{task.type}</span>
                     </div>
                   </div>
                 </div>
@@ -161,7 +246,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       e.stopPropagation();
                       onReopenTask(task.id);
                     }}
-                    className="p-1.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1 font-semibold cursor-pointer transition-colors"
+                    className="p-1.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1 font-semibold cursor-pointer transition-colors border border-transparent hover:border-blue-200"
                     title="Mover de vuelta al tablero Kanban"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />

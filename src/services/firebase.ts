@@ -117,19 +117,24 @@ export const initAuth = (
         onAuthSuccess(user, cachedAccessToken || storedToken || '', profile);
       }
     } else {
-      const profile = getStoredUserProfile();
-      const hasStoredKey = typeof window !== 'undefined' && localStorage.getItem(STORAGE_USER_KEY) !== null;
-      if (profile && hasStoredKey) {
-        if (onAuthSuccess) {
-          onAuthSuccess(
-            { uid: profile.uid, email: profile.email, displayName: profile.displayName },
-            cachedAccessToken || storedToken || '',
-            profile
-          );
-        }
-      } else {
+      const storedKey = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_USER_KEY) : null;
+      if (!storedKey) {
         cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
+      } else {
+        const profile = getStoredUserProfile();
+        if (profile) {
+          if (onAuthSuccess) {
+            onAuthSuccess(
+              { uid: profile.uid, email: profile.email, displayName: profile.displayName },
+              cachedAccessToken || storedToken || '',
+              profile
+            );
+          }
+        } else {
+          cachedAccessToken = null;
+          if (onAuthFailure) onAuthFailure();
+        }
       }
     }
   });

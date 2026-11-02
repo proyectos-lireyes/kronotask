@@ -2,6 +2,7 @@ import React from 'react';
 import { TaskItem, CustomTag, Board } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { detectTaskStatusMismatch, calculateTaskUrgencyInfo, getQuadrantStyle } from '../utils/prioritySort';
+import { formatRecurrenceLabel } from '../utils/recurrence';
 import {
   CheckCircle2,
   Flag,
@@ -11,6 +12,7 @@ import {
   Paperclip,
   MessageSquare,
   Zap,
+  Repeat,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from '../services/notifications';
@@ -88,13 +90,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
-  // El color de la tarjeta refleja directamente el cuadrante (1 al 9) de la matriz según su puntaje
+  // Las tarjetas tienen fondo blanco/neutro y limpio, con borde izquierdo de color por cuadrante
   const getCardColorClass = () => {
     if (isDone) {
-      return 'border-l-4 border-l-slate-400 border-slate-300 bg-slate-100/80 text-slate-600 opacity-70';
+      return 'border-l-4 border-l-slate-400 border-slate-200 bg-slate-50 dark:bg-slate-800/60 text-slate-500 opacity-70';
     }
     const qStyle = getQuadrantStyle(urgencyInfo.quadrantNumber);
-    return `border-l-4 ${qStyle.borderLeft} ${qStyle.borderColor} ${qStyle.bgLight} ${qStyle.hoverBg} text-slate-900 shadow-2xs`;
+    return `border-l-4 ${qStyle.borderLeft} border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-750 text-slate-900 dark:text-slate-100 shadow-2xs hover:shadow-xs`;
   };
 
   return (
@@ -202,6 +204,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             >
               <Hourglass className="w-2.5 h-2.5 animate-spin" />
               <span>{waitingRemainingText}</span>
+            </span>
+          )}
+
+          {/* Recurrence Badge */}
+          {task.recurrence?.enabled && (
+            <span
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold shrink-0 text-[10px]"
+              title={`Tarea Periódica: ${formatRecurrenceLabel(task.recurrence)}`}
+            >
+              <Repeat className="w-2.5 h-2.5 text-indigo-600" />
+              <span>{formatRecurrenceLabel(task.recurrence)}</span>
             </span>
           )}
 
