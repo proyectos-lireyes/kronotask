@@ -12,7 +12,7 @@ import {
   CustomPriorityDefinition,
 } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
-import { formatRecurrenceLabel } from '../utils/recurrence';
+import { formatRecurrenceLabel, calculateAllOccurrences } from '../utils/recurrence';
 import { detectTaskStatusMismatch } from '../utils/prioritySort';
 import { ConfirmationModal } from './ConfirmationModal';
 import { checkTaskCollisionWithExisting, isEventType } from '../utils/collisionUtils';
@@ -56,7 +56,7 @@ interface TaskModalProps {
   acceptedCollisions?: string[];
   onAcceptCollision?: (pairKey: string) => void;
   onClose: () => void;
-  onSave: (task: TaskItem) => void;
+  onSave: (task: TaskItem, options?: { editScope?: 'single' | 'series' }) => void;
   onDelete: (taskId: string) => void;
   onAddTag: (name: string, color: string) => void;
 }
@@ -100,8 +100,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   // Recurrence
   const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
-  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
-  const [recurrenceUnit, setRecurrenceUnit] = useState<RecurrenceUnit>('weeks');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(15);
+  const [recurrenceUnit, setRecurrenceUnit] = useState<RecurrenceUnit>('days');
+  const [recurrenceEndCondition, setRecurrenceEndCondition] = useState<'until_date' | 'count' | 'never'>('until_date');
+  const [recurrenceUntilDate, setRecurrenceUntilDate] = useState<string>('');
+  const [recurrenceCount, setRecurrenceCount] = useState<number>(6);
+  const [generateInstances, setGenerateInstances] = useState<boolean>(true);
+  const [seriesEditScope, setSeriesEditScope] = useState<'single' | 'series'>('series');
 
   // Reminders
   const [reminders, setReminders] = useState<{ id: string; offsetMinutes: number; label: string }[]>([]);
@@ -171,8 +176,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setEndDate(toDateTimeLocal(new Date(task.endDate)));
       setSelectedTags(task.tags || []);
       setRecurrenceEnabled(task.recurrence?.enabled || false);
-      setRecurrenceInterval(task.recurrence?.interval || 1);
-      setRecurrenceUnit(task.recurrence?.unit || 'weeks');
+      setRecurrenceInterval(task.recurrence?.interval || 15);
+      setRecurrenceUnit(task.recurrence?.unit || 'days');
+      setRecurrenceEndCondition(task.recurrence?.endCondition || 'until_date');
+      if (task.recurrence?.repeatUntilDate) {
+        setRecurrenceUntilDate(toDateTimeLocal(new Date(task.recurrence.repeatUntilDate)));
+      } else {
+        const inThreeMonths = new Date(new Date(task.startDate).getTime() + 90 * 24 * 60 * 60 * 1000);
+        setRecurrenceUntilDate(toDateTimeLocal(inThreeMonths));
+      }
+      setRecurrenceCount(task.recurrence?.repeatCount || 6);
+      setGenerateInstances(task.recurrence?.generateInstances !== false);
+      setSeriesEditScope('series');
       setReminders(task.reminders || []);
       setAttachments(task.attachments || []);
       setComments(task.comments || []);
@@ -193,8 +208,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setSelectedTags([]);
       setWaitingDays(2);
       setRecurrenceEnabled(false);
-      setRecurrenceInterval(1);
-      setRecurrenceUnit('weeks');
+      setRecurrenceInterval(15);
+      setRecurrenceUnit('days');
+      setRecurrenceEndCondition('until_date');
+      const inThreeMonths = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      setRecurrenceUntilDate(toDateTimeLocal(inThreeMonths));
+      setRecurrenceCount(6);
+      setGenerateInstances(true);
+      setSeriesEditScope('series');
       setReminders([]); // No unwanted presets
       setAttachments([]);
       setComments([]);
@@ -227,6 +248,30 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       combinedAccepted
     );
   }, [task?.id, type, startDate, endDate, allTasks, allBoards, combinedAccepted]);
+
+  const previewOccurrences = useMemo(() => {
+    if (!recurrenceEnabled || !startDate || !endDate) return [];
+    try {
+      const untilIso = recurrenceEndCondition === 'until_date' && recurrenceUntilDate
+        ? new Date(recurrenceUntilDate).toISOString()
+        : undefined;
+      return calculateAllOccurrences(
+        new Date(startDate).toISOString(),
+        new Date(endDate).toISOString(),
+        {
+          enabled: true,
+          interval: Math.max(1, recurrenceInterval),
+          unit: recurrenceUnit,
+          endCondition: recurrenceEndCondition,
+          repeatUntilDate: untilIso,
+          repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : undefined,
+        },
+        50
+      );
+    } catch (e) {
+      return [];
+    }
+  }, [recurrenceEnabled, startDate, endDate, recurrenceInterval, recurrenceUnit, recurrenceEndCondition, recurrenceUntilDate, recurrenceCount]);
 
   const selectedBoardObj = allBoards.find((b) => b.id === boardId) || allBoards[0];
   const selectedPriorityObj = allPriorities.find((p) => p.id === priority) || allPriorities[0];
@@ -297,8 +342,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             enabled: true,
             interval: Math.max(1, recurrenceInterval),
             unit: recurrenceUnit,
+            endCondition: recurrenceEndCondition,
+            repeatUntilDate: recurrenceEndCondition === 'until_date' && recurrenceUntilDate ? new Date(recurrenceUntilDate).toISOString() : undefined,
+            repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : undefined,
+            generateInstances,
           }
         : undefined,
+      recurrenceSeriesId: task?.recurrenceSeriesId,
+      recurrenceIndex: task?.recurrenceIndex,
+      recurrenceTotal: task?.recurrenceTotal,
       reminders,
       attachments,
       comments,
@@ -306,7 +358,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    onSave(updatedTask);
+    onSave(updatedTask, { editScope: seriesEditScope });
 
     if (onAcceptCollision && acceptedLocally.length > 0) {
       acceptedLocally.forEach((key) => {
@@ -1133,16 +1185,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
                       {/* Quick recurrence presets */}
                       <div className="col-span-2 flex flex-wrap items-center gap-1 pt-1">
-                        <span className="text-[10px] text-slate-500 font-bold mr-0.5">Presets:</span>
+                        <span className="text-[10px] text-slate-500 font-bold mr-0.5">Atajos:</span>
                         {[
-                          { label: 'Cada 2 horas', interval: 2, unit: 'hours' as const },
-                          { label: 'Diario', interval: 1, unit: 'days' as const },
+                          { label: 'Cada 15 días', interval: 15, unit: 'days' as const },
+                          { label: 'Diario (1 día)', interval: 1, unit: 'days' as const },
                           { label: 'Cada 3 días', interval: 3, unit: 'days' as const },
-                          { label: 'Semanal', interval: 1, unit: 'weeks' as const },
-                          { label: 'Quincenal', interval: 2, unit: 'weeks' as const },
-                          { label: 'Mensual', interval: 1, unit: 'months' as const },
+                          { label: 'Semanal (7 días)', interval: 1, unit: 'weeks' as const },
+                          { label: 'Quincenal (2 sem)', interval: 2, unit: 'weeks' as const },
+                          { label: 'Mensual (1 mes)', interval: 1, unit: 'months' as const },
                           { label: 'Cada 6 meses', interval: 6, unit: 'months' as const },
-                          { label: 'Anual', interval: 1, unit: 'years' as const },
+                          { label: 'Anual (1 año)', interval: 1, unit: 'years' as const },
                         ].map((p) => (
                           <button
                             key={p.label}
@@ -1153,7 +1205,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             }}
                             className={`px-2 py-0.5 text-[10px] font-bold rounded-md border transition-all cursor-pointer ${
                               recurrenceInterval === p.interval && recurrenceUnit === p.unit
-                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
                                 : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'
                             }`}
                           >
@@ -1162,22 +1214,239 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         ))}
                       </div>
 
-                      {/* Explanation Box for Cycle Evaluation */}
-                      <div className="col-span-2 mt-2 p-3 bg-indigo-100/60 rounded-xl border border-indigo-200 text-xs text-indigo-950 space-y-1">
-                        <p className="font-bold flex items-center gap-1.5 text-indigo-900">
-                          <CheckCircle2 className="w-4 h-4 text-indigo-600" />
-                          ¿Cómo saber si cumpliste a tiempo este ciclo?
-                        </p>
-                        <p className="text-[11px] leading-relaxed text-indigo-900">
-                          1. <strong>Comprobación de fecha:</strong> Al marcar como completada esta tarea, la app comparará tu fecha real de entrega contra el límite del ciclo actual (<strong>{new Date(endDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</strong>).
-                        </p>
-                        <p className="text-[11px] leading-relaxed text-indigo-900">
-                          2. <strong>Evaluación en Historial:</strong> Si la entregas el {new Date(endDate).toLocaleDateString([], { month: 'short', day: 'numeric' })} o antes, se archivará como <span className="font-extrabold text-emerald-700">✅ A tiempo</span>. Si se pasa de la fecha límite, se registrará como <span className="font-extrabold text-rose-700">🚨 Con retraso</span>.
-                        </p>
-                        <p className="text-[11px] leading-relaxed text-indigo-900">
-                          3. <strong>Siguiente Periodo:</strong> Automáticamente se abrirá el ciclo del siguiente periodo para seguir tu hábito sin perder la historia del mes anterior.
-                        </p>
+                      {/* Límite de la Periodicidad */}
+                      <div className="col-span-2 pt-2 border-t border-slate-200 space-y-2">
+                        <label className="block text-xs font-bold text-slate-800">
+                          Límite de la Periodicidad (¿Hasta cuándo se repite?)
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-200/60 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setRecurrenceEndCondition('until_date')}
+                            className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                              recurrenceEndCondition === 'until_date'
+                                ? 'bg-white text-indigo-700 shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Hasta fecha límite
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRecurrenceEndCondition('count')}
+                            className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                              recurrenceEndCondition === 'count'
+                                ? 'bg-white text-indigo-700 shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Por repeticiones
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRecurrenceEndCondition('never')}
+                            className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                              recurrenceEndCondition === 'never'
+                                ? 'bg-white text-indigo-700 shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Sin fin (continuo)
+                          </button>
+                        </div>
+
+                        {recurrenceEndCondition === 'until_date' && (
+                          <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] text-slate-500 font-bold mr-0.5">Fijar hasta:</span>
+                              {[
+                                { label: '+1 Mes', days: 30 },
+                                { label: '+3 Meses', days: 90 },
+                                { label: '+6 Meses', days: 180 },
+                                { label: '+1 Año', days: 365 },
+                              ].map((btn) => (
+                                <button
+                                  key={btn.label}
+                                  type="button"
+                                  onClick={() => {
+                                    const base = startDate ? new Date(startDate) : new Date();
+                                    const target = new Date(base.getTime() + btn.days * 24 * 60 * 60 * 1000);
+                                    setRecurrenceUntilDate(toDateTimeLocal(target));
+                                  }}
+                                  className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 rounded-md border border-slate-200 cursor-pointer"
+                                >
+                                  {btn.label}
+                                </button>
+                              ))}
+                              {endDate && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRecurrenceUntilDate(endDate)}
+                                  className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 rounded-md border border-slate-200 cursor-pointer"
+                                >
+                                  Misma fecha fin de tarea
+                                </button>
+                              )}
+                            </div>
+                            <CustomDateTimePicker
+                              label="Fecha límite hasta donde se crearán tareas"
+                              value={recurrenceUntilDate}
+                              onChange={(val) => setRecurrenceUntilDate(val)}
+                              required
+                            />
+                          </div>
+                        )}
+
+                        {recurrenceEndCondition === 'count' && (
+                          <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                            <label className="block text-xs font-semibold text-slate-700">
+                              Número total de tareas a programar:
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                value={recurrenceCount}
+                                onChange={(e) => setRecurrenceCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-24 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 font-bold"
+                              />
+                              <div className="flex flex-wrap items-center gap-1">
+                                {[3, 6, 12, 24].map((cnt) => (
+                                  <button
+                                    key={cnt}
+                                    type="button"
+                                    onClick={() => setRecurrenceCount(cnt)}
+                                    className={`px-2 py-1 text-[10px] font-bold rounded-md border cursor-pointer ${
+                                      recurrenceCount === cnt
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-indigo-50'
+                                    }`}
+                                  >
+                                    {cnt} veces
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {recurrenceEndCondition === 'never' && (
+                          <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 text-xs text-indigo-900">
+                            <p className="font-semibold">Modo continuo</p>
+                            <p className="text-[11px] text-indigo-700 mt-0.5">
+                              Al completar cada ciclo, el sistema abrirá automáticamente el siguiente periodo manteniendo la cadena sin fin.
+                            </p>
+                          </div>
+                        )}
                       </div>
+
+                      {/* Generar tareas en el tablero */}
+                      <div className="col-span-2 pt-2 border-t border-slate-200">
+                        <label className="flex items-start gap-2.5 p-3 bg-white rounded-xl border border-indigo-100 cursor-pointer hover:bg-slate-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={generateInstances}
+                            onChange={(e) => setGenerateInstances(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <div className="flex-1">
+                            <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>Crear todas las tareas programadas hasta la fecha fin</span>
+                              <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] font-extrabold rounded">Recomendado</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                              Crea de inmediato una tarea individual para cada ciclo (cada {recurrenceInterval} {recurrenceUnit === 'days' ? 'días' : recurrenceUnit}) en el tablero Kanban, Calendario y Gantt para verlas y gestionarlas en el tiempo.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Vista Previa de la Serie */}
+                      {previewOccurrences.length > 0 && (
+                        <div className="col-span-2 p-3 bg-indigo-50/90 rounded-xl border border-indigo-200 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold text-indigo-950 flex items-center gap-1.5">
+                              <Repeat className="w-3.5 h-3.5 text-indigo-600" />
+                              Vista previa: {previewOccurrences.length} tareas programadas
+                            </span>
+                            <span className="text-[10px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded-full border border-indigo-200">
+                              Cada {recurrenceInterval} {recurrenceUnit === 'days' ? 'días' : recurrenceUnit}
+                            </span>
+                          </div>
+
+                          <div className="max-h-36 overflow-y-auto space-y-1 pr-1 text-[11px]">
+                            {previewOccurrences.slice(0, 15).map((occ) => {
+                              const occStart = new Date(occ.startDate);
+                              const dateText = occStart.toLocaleDateString('es-ES', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                              });
+                              const timeText = `${occStart.getHours().toString().padStart(2, '0')}:${occStart.getMinutes().toString().padStart(2, '0')}`;
+                              return (
+                                <div
+                                  key={occ.index}
+                                  className="flex items-center justify-between p-1.5 bg-white rounded-lg border border-indigo-100 text-slate-700"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-extrabold text-[10px] flex items-center justify-center shrink-0">
+                                      {occ.index}
+                                    </span>
+                                    <span className="font-semibold text-slate-800">
+                                      Ciclo {occ.index} {occ.index === 1 ? '(Tarea inicial)' : ''}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-medium text-slate-500">
+                                    {dateText} · {timeText}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {previewOccurrences.length > 15 && (
+                              <p className="text-[10px] text-center text-indigo-600 font-bold pt-1">
+                                + {previewOccurrences.length - 15} tareas programadas más...
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Scope Selector if editing an existing task from a series */}
+                      {task?.recurrenceSeriesId && (
+                        <div className="col-span-2 p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
+                          <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                            <Repeat className="w-3.5 h-3.5 text-amber-600" />
+                            Esta tarea pertenece a una serie de repeticiones (Ciclo {task.recurrenceIndex || 1} de {task.recurrenceTotal || previewOccurrences.length})
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setSeriesEditScope('series')}
+                              className={`p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                                seriesEditScope === 'series'
+                                  ? 'bg-amber-100 border-amber-400 font-bold text-amber-950 shadow-2xs'
+                                  : 'bg-white border-amber-200 text-amber-800 hover:bg-amber-100/50'
+                              }`}
+                            >
+                              <div>Actualizar toda la serie</div>
+                              <div className="text-[10px] opacity-75 font-normal">Aplica periodicidad a toda la cadena</div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSeriesEditScope('single')}
+                              className={`p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                                seriesEditScope === 'single'
+                                  ? 'bg-amber-100 border-amber-400 font-bold text-amber-950 shadow-2xs'
+                                  : 'bg-white border-amber-200 text-amber-800 hover:bg-amber-100/50'
+                              }`}
+                            >
+                              <div>Solo esta ocurrencia</div>
+                              <div className="text-[10px] opacity-75 font-normal">Modifica solo el ciclo {task.recurrenceIndex || 1}</div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

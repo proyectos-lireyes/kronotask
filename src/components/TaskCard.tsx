@@ -162,6 +162,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {task.title}
         </h3>
 
+        {task.recurrenceSeriesId && task.recurrenceIndex ? (
+          <span
+            className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 font-extrabold text-[9px] border border-indigo-200 shrink-0"
+            title={`Periodicidad: Ciclo ${task.recurrenceIndex}${task.recurrenceTotal ? ` de ${task.recurrenceTotal}` : ''}`}
+          >
+            <Repeat className="w-2.5 h-2.5" />
+            <span>{task.recurrenceIndex}{task.recurrenceTotal ? `/${task.recurrenceTotal}` : ''}</span>
+          </span>
+        ) : task.recurrence?.enabled ? (
+          <span
+            className="inline-flex items-center px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 text-[9px] border border-indigo-200 shrink-0"
+            title="Tarea periódica"
+          >
+            <Repeat className="w-2.5 h-2.5" />
+          </span>
+        ) : null}
+
         {task.attachments.length > 0 && (
           <span className="flex items-center gap-0.5 text-slate-400 shrink-0" title="Archivos adjuntos">
             <Paperclip className="w-3 h-3" />

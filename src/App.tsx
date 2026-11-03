@@ -47,7 +47,7 @@ import {
   requestNotificationPermission,
   soundService,
 } from './services/notifications';
-import { calculateNextOccurrence } from './utils/recurrence';
+import { calculateNextOccurrence, generateRecurringTaskSeries } from './utils/recurrence';
 import { calculateTimeLevel } from './utils/timeColor';
 import { detectCollisions } from './utils/collisionUtils';
 import { getNextSundayEnd } from './utils/prioritySort';
@@ -70,6 +70,7 @@ import { SemaforoFilterModal } from './components/SemaforoFilterModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { WaitingDaysModal } from './components/WaitingDaysModal';
+import { CompletionDateModal } from './components/CompletionDateModal';
 import { checkGitHubRelease, checkAndCleanupOldApkOnStartup } from './services/updateService';
 import { ImportBoardAction } from './types';
 import {
@@ -170,13 +171,16 @@ export default function App() {
   const [isSemaforoModalOpen, setIsSemaforoModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [waitingModalTask, setWaitingModalTask] = useState<TaskItem | null>(null);
+  const [completionModalTask, setCompletionModalTask] = useState<TaskItem | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
     confirmText?: string;
+    cancelText?: string;
     isDestructive?: boolean;
     onConfirm: () => void;
+    onCancel?: () => void;
   }>({
     isOpen: false,
     title: '',
@@ -470,7 +474,12 @@ export default function App() {
     }
   };
 
-  const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus, waitingDays?: number) => {
+  const handleTaskStatusChange = (
+    taskId: string,
+    newStatus: TaskStatus,
+    waitingDays?: number,
+    completionDate?: string
+  ) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
@@ -480,29 +489,45 @@ export default function App() {
       return;
     }
 
+    // Si se pasa a 'done' y no viene completionDate especificada, abrimos el modal para indicarla
+    if (newStatus === 'done' && task.status !== 'done' && !completionDate) {
+      setCompletionModalTask(task);
+      return;
+    }
+
     let extraTask: TaskItem | null = null;
     if (newStatus === 'done' && task.recurrence?.enabled) {
-      const { nextStart, nextEnd } = calculateNextOccurrence(task.startDate, task.endDate, task.recurrence);
-      extraTask = {
-        ...task,
-        id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        title: `${task.title} (Siguiente ciclo)`,
-        status: 'todo',
-        startDate: nextStart,
-        endDate: nextEnd,
-        completedAt: null,
-        comments: [
-          {
-            id: `comm-rec-${Date.now()}`,
-            authorName: 'Sistema de Periodicidad',
-            authorEmail: 'system@chronotask.app',
-            content: `Ciclo generado automáticamente tras completar el anterior.`,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      // Si la tarea forma parte de una serie ya pre-generada en el tablero,
+      // comprobamos si ya existen ocurrencias futuras para no duplicarlas
+      const hasFutureInSeries = task.recurrenceSeriesId
+        ? tasks.some((t) => t.recurrenceSeriesId === task.recurrenceSeriesId && t.id !== task.id && t.status !== 'done')
+        : false;
+
+      // Solo crear extraTask si no hay ocurrencias futuras ya generadas Y (es modo continuo o sin límite)
+      if (!hasFutureInSeries && (task.recurrence.endCondition === 'never' || !task.recurrenceSeriesId)) {
+        const { nextStart, nextEnd } = calculateNextOccurrence(task.startDate, task.endDate, task.recurrence);
+        extraTask = {
+          ...task,
+          id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          title: task.title,
+          status: 'todo',
+          startDate: nextStart,
+          endDate: nextEnd,
+          completedAt: null,
+          recurrenceIndex: (task.recurrenceIndex || 1) + 1,
+          comments: [
+            {
+              id: `comm-rec-${Date.now()}`,
+              authorName: 'Sistema de Periodicidad',
+              authorEmail: 'system@chronotask.app',
+              content: `Ciclo generado automáticamente tras completar el anterior.`,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
     }
 
     const updatedTasks = tasks.map((t) => {
@@ -535,7 +560,7 @@ export default function App() {
           waitingDays: currentWaitingDays,
           endDate,
           frictionPoints,
-          completedAt: newStatus === 'done' ? new Date().toISOString() : null,
+          completedAt: newStatus === 'done' ? (completionDate || new Date().toISOString()) : null,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -560,8 +585,42 @@ export default function App() {
     updateTasks(updatedTasks);
   };
 
-  const handleSaveTask = (taskToSave: TaskItem) => {
+  const handleSaveTask = (taskToSave: TaskItem, options?: { editScope?: 'single' | 'series' }) => {
+    const editScope = options?.editScope || 'series';
     const exists = tasks.some((t) => t.id === taskToSave.id);
+
+    // Si la tarea tiene periodicidad habilitada y está activo el flag para generar tareas en el tablero
+    if (taskToSave.recurrence?.enabled && taskToSave.recurrence.generateInstances !== false) {
+      if (!exists || editScope === 'series' || !taskToSave.recurrenceSeriesId) {
+        const seriesId = taskToSave.recurrenceSeriesId || `series-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const generatedSeries = generateRecurringTaskSeries(
+          {
+            ...taskToSave,
+            recurrenceSeriesId: seriesId,
+          },
+          { seriesId }
+        );
+
+        if (exists || taskToSave.recurrenceSeriesId) {
+          // Mantener tareas completadas anteriores de esta serie para no alterar su historial
+          const otherTasks = tasks.filter((t) => t.recurrenceSeriesId !== seriesId && t.id !== taskToSave.id);
+          const completedFromSeries = tasks.filter((t) => t.recurrenceSeriesId === seriesId && t.status === 'done');
+          const pendingGenerated = generatedSeries.filter(
+            (gen) => !completedFromSeries.some((c) => c.recurrenceIndex === gen.recurrenceIndex)
+          );
+          const updated = [...completedFromSeries, ...pendingGenerated, ...otherTasks];
+          updateTasks(updated);
+          return;
+        } else {
+          // Nueva tarea periódica: se crean todas las tareas hasta la fecha límite
+          const updated = [...generatedSeries, ...tasks];
+          updateTasks(updated);
+          return;
+        }
+      }
+    }
+
+    // Guardado normal de tarea única o edición solo de esta ocurrencia
     let updated: TaskItem[];
     if (exists) {
       updated = tasks.map((t) => (t.id === taskToSave.id ? taskToSave : t));
@@ -572,11 +631,38 @@ export default function App() {
   };
 
   const handleDeleteTask = (taskId: string) => {
+    const taskToDelete = tasks.find((t) => t.id === taskId);
+    const seriesId = taskToDelete?.recurrenceSeriesId;
+    const seriesTasks = seriesId ? tasks.filter((t) => t.recurrenceSeriesId === seriesId) : [];
+
+    if (seriesId && seriesTasks.length > 1) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Eliminar Tarea Periódica',
+        message: `Esta tarea forma parte de una serie de ${seriesTasks.length} repeticiones. ¿Deseas eliminar solo esta ocurrencia o toda la serie?`,
+        confirmText: 'Eliminar toda la serie',
+        cancelText: 'Solo esta ocurrencia',
+        isDestructive: true,
+        onConfirm: () => {
+          const updated = tasks.filter((t) => t.recurrenceSeriesId !== seriesId);
+          updateTasks(updated);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        },
+        onCancel: () => {
+          const updated = tasks.filter((t) => t.id !== taskId);
+          updateTasks(updated);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        },
+      });
+      return;
+    }
+
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Tarea',
       message: '¿Estás seguro de que deseas eliminar esta tarea permanentemente?',
       confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
       isDestructive: true,
       onConfirm: () => {
         const updated = tasks.filter((t) => t.id !== taskId);
@@ -1451,9 +1537,16 @@ export default function App() {
         title={confirmModal.title}
         message={confirmModal.message}
         confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
         isDestructive={confirmModal.isDestructive}
         onConfirm={confirmModal.onConfirm}
-        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        onCancel={() => {
+          if (confirmModal.onCancel) {
+            confirmModal.onCancel();
+          } else {
+            setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          }
+        }}
       />
 
       {/* Quadrant Settings Modal (Ajuste de días Q1-Q9) */}
@@ -1477,6 +1570,20 @@ export default function App() {
             const taskId = waitingModalTask.id;
             setWaitingModalTask(null);
             handleTaskStatusChange(taskId, 'waiting', days);
+          }
+        }}
+      />
+
+      {/* Completion Date Modal (indica fecha y hora de cierre real) */}
+      <CompletionDateModal
+        isOpen={Boolean(completionModalTask)}
+        task={completionModalTask}
+        onClose={() => setCompletionModalTask(null)}
+        onConfirm={(completedAtIso) => {
+          if (completionModalTask) {
+            const taskId = completionModalTask.id;
+            setCompletionModalTask(null);
+            handleTaskStatusChange(taskId, 'done', undefined, completedAtIso);
           }
         }}
       />

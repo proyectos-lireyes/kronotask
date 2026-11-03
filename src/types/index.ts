@@ -14,6 +14,7 @@ export interface RecurrenceRule {
   endCondition?: 'never' | 'until_date' | 'count';
   repeatUntilDate?: string;
   repeatCount?: number;
+  generateInstances?: boolean; // Whether to create all individual instances in the board/views up to the limit
 }
 
 export interface TaskAttachment {
@@ -88,6 +89,9 @@ export interface TaskItem {
   tags: string[];
   frictionPoints?: number; // Historial acumulativo de fricción (+5 cada vez que entra a 'waiting')
   recurrence?: RecurrenceRule;
+  recurrenceSeriesId?: string; // Common series ID connecting all recurring occurrences
+  recurrenceIndex?: number; // Current cycle number (1, 2, 3...)
+  recurrenceTotal?: number; // Total number of cycles in the scheduled series
   attachments: TaskAttachment[];
   comments: TaskComment[];
   reminders: TaskReminder[];

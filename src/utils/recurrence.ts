@@ -1,5 +1,33 @@
 import { RecurrenceRule, RecurrenceUnit, TaskItem } from '../types';
 
+export function addRecurrenceInterval(d: Date, interval: number, unit: RecurrenceUnit): Date {
+  const result = new Date(d);
+  switch (unit) {
+    case 'hours':
+      result.setHours(result.getHours() + interval);
+      break;
+    case 'days':
+      result.setDate(result.getDate() + interval);
+      break;
+    case 'weeks':
+      result.setDate(result.getDate() + interval * 7);
+      break;
+    case 'months': {
+      const origDay = d.getDate();
+      result.setMonth(result.getMonth() + interval);
+      // Evitar salto de mes en días como 31 de enero -> fin de febrero
+      if (result.getDate() !== origDay) {
+        result.setDate(0);
+      }
+      break;
+    }
+    case 'years':
+      result.setFullYear(result.getFullYear() + interval);
+      break;
+  }
+  return result;
+}
+
 export function calculateNextOccurrence(
   currentStart: string,
   currentEnd: string,
@@ -9,29 +37,7 @@ export function calculateNextOccurrence(
   const end = new Date(currentEnd);
   const durationMs = Math.max(1000 * 60 * 30, end.getTime() - start.getTime());
 
-  const addTime = (d: Date, interval: number, unit: RecurrenceUnit): Date => {
-    const result = new Date(d);
-    switch (unit) {
-      case 'hours':
-        result.setHours(result.getHours() + interval);
-        break;
-      case 'days':
-        result.setDate(result.getDate() + interval);
-        break;
-      case 'weeks':
-        result.setDate(result.getDate() + interval * 7);
-        break;
-      case 'months':
-        result.setMonth(result.getMonth() + interval);
-        break;
-      case 'years':
-        result.setFullYear(result.getFullYear() + interval);
-        break;
-    }
-    return result;
-  };
-
-  const nextStart = addTime(start, recurrence.interval, recurrence.unit);
+  const nextStart = addRecurrenceInterval(start, recurrence.interval, recurrence.unit);
   const nextEnd = new Date(nextStart.getTime() + durationMs);
 
   return {
@@ -40,9 +46,134 @@ export function calculateNextOccurrence(
   };
 }
 
+export interface OccurrenceDateRange {
+  startDate: string;
+  endDate: string;
+  index: number;
+}
+
+/**
+ * Calcula todas las ocurrencias de una periodicidad desde la fecha de inicio hasta el límite establecido
+ * (fecha fin de periodicidad o número de repeticiones).
+ */
+export function calculateAllOccurrences(
+  startDateIso: string,
+  endDateIso: string,
+  recurrence: RecurrenceRule,
+  maxCap: number = 60
+): OccurrenceDateRange[] {
+  if (!recurrence || !recurrence.enabled) {
+    return [{ startDate: startDateIso, endDate: endDateIso, index: 1 }];
+  }
+
+  const start = new Date(startDateIso);
+  const end = new Date(endDateIso);
+  const durationMs = Math.max(1000 * 60 * 30, end.getTime() - start.getTime());
+  const interval = Math.max(1, recurrence.interval || 1);
+  const unit = recurrence.unit || 'days';
+
+  const occurrences: OccurrenceDateRange[] = [
+    {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      index: 1,
+    },
+  ];
+
+  let currentStart = new Date(start);
+  let currentIndex = 1;
+
+  // Determinar condición de fin
+  const endCondition = recurrence.endCondition || (recurrence.repeatUntilDate ? 'until_date' : recurrence.repeatCount ? 'count' : 'until_date');
+
+  let untilTimeMs: number | null = null;
+  if (endCondition === 'until_date') {
+    if (recurrence.repeatUntilDate) {
+      untilTimeMs = new Date(recurrence.repeatUntilDate).getTime();
+    } else {
+      // Si la fecha de fin de la tarea es mayor que el primer intervalo, usar esa fecha como límite
+      const firstCycleNextMs = addRecurrenceInterval(start, interval, unit).getTime();
+      if (end.getTime() > firstCycleNextMs) {
+        untilTimeMs = end.getTime();
+      } else {
+        // Por defecto hasta 3 meses en el futuro
+        const defaultUntil = new Date(start);
+        defaultUntil.setMonth(defaultUntil.getMonth() + 3);
+        untilTimeMs = defaultUntil.getTime();
+      }
+    }
+  }
+
+  const maxCount = endCondition === 'count'
+    ? Math.min(Math.max(1, recurrence.repeatCount || 1), maxCap)
+    : endCondition === 'never'
+    ? Math.min(12, maxCap)
+    : maxCap;
+
+  while (currentIndex < maxCount) {
+    const nextStart = addRecurrenceInterval(currentStart, interval, unit);
+    const nextEnd = new Date(nextStart.getTime() + durationMs);
+
+    if (untilTimeMs !== null && nextStart.getTime() > untilTimeMs) {
+      break;
+    }
+
+    currentIndex++;
+    occurrences.push({
+      startDate: nextStart.toISOString(),
+      endDate: nextEnd.toISOString(),
+      index: currentIndex,
+    });
+
+    currentStart = nextStart;
+  }
+
+  return occurrences;
+}
+
+/**
+ * Genera el conjunto de tareas completas correspondientes a la serie periódica
+ */
+export function generateRecurringTaskSeries(
+  baseTask: TaskItem,
+  options?: { seriesId?: string }
+): TaskItem[] {
+  if (!baseTask.recurrence || !baseTask.recurrence.enabled) {
+    return [baseTask];
+  }
+
+  const seriesId = options?.seriesId || baseTask.recurrenceSeriesId || `series-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const occurrences = calculateAllOccurrences(baseTask.startDate, baseTask.endDate, baseTask.recurrence);
+  const total = occurrences.length;
+
+  return occurrences.map((occ, idx) => {
+    const isFirst = idx === 0;
+    const taskId = isFirst ? baseTask.id : `task-${seriesId}-${occ.index}`;
+
+    return {
+      ...baseTask,
+      id: taskId,
+      title: baseTask.title,
+      status: isFirst ? baseTask.status : 'todo',
+      startDate: occ.startDate,
+      endDate: occ.endDate,
+      completedAt: isFirst ? baseTask.completedAt : null,
+      recurrence: {
+        ...baseTask.recurrence!,
+        repeatCount: total,
+      },
+      recurrenceSeriesId: seriesId,
+      recurrenceIndex: occ.index,
+      recurrenceTotal: total,
+      createdAt: isFirst ? baseTask.createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  });
+}
+
 export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
   if (!rule || !rule.enabled) return 'Sin repetición';
-  const { interval, unit } = rule;
+  const { interval, unit, endCondition, repeatUntilDate, repeatCount } = rule;
   const unitMap: Record<RecurrenceUnit, { singular: string; plural: string }> = {
     hours: { singular: 'hora', plural: 'horas' },
     days: { singular: 'día', plural: 'días' },
@@ -52,7 +183,17 @@ export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
   };
 
   const label = interval === 1 ? unitMap[unit].singular : `${interval} ${unitMap[unit].plural}`;
-  return `Cada ${label}`;
+  let baseText = `Cada ${label}`;
+
+  if (endCondition === 'until_date' && repeatUntilDate) {
+    const d = new Date(repeatUntilDate);
+    const dateStr = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    baseText += ` · Hasta ${dateStr}`;
+  } else if (endCondition === 'count' && repeatCount) {
+    baseText += ` · ${repeatCount} repeticiones`;
+  }
+
+  return baseText;
 }
 
 export function isTaskOccurringOnDate(task: TaskItem, date: Date): boolean {
@@ -62,7 +203,7 @@ export function isTaskOccurringOnDate(task: TaskItem, date: Date): boolean {
   const taskStart = new Date(task.startDate).getTime();
   const taskEnd = new Date(task.endDate).getTime();
 
-  // Direct date match
+  // Coincidencia directa con fecha de esta tarea
   if (
     (taskEnd >= startOfDay && taskEnd <= endOfDay) ||
     (taskStart >= startOfDay && taskStart <= endOfDay) ||
@@ -71,17 +212,21 @@ export function isTaskOccurringOnDate(task: TaskItem, date: Date): boolean {
     return true;
   }
 
-  // Check recurring pattern
+  // Si la tarea tiene tareas hijas de la serie generadas en el sistema,
+  // cada una ya tiene sus fechas individuales.
+  // Solo evaluamos el patrón recurrente si la tarea es única y no tiene serie generada.
+  if (task.recurrenceSeriesId && task.recurrenceTotal && task.recurrenceTotal > 1) {
+    return false;
+  }
+
   const rule = task.recurrence;
   if (!rule || !rule.enabled) return false;
 
   const initialStart = new Date(task.startDate);
   const initialStartDay = new Date(initialStart.getFullYear(), initialStart.getMonth(), initialStart.getDate()).getTime();
 
-  // Date must be at or after initial start date
   if (startOfDay < initialStartDay) return false;
 
-  // Check until_date limit if specified
   if (rule.endCondition === 'until_date' && rule.repeatUntilDate) {
     const untilTime = new Date(rule.repeatUntilDate).getTime();
     if (startOfDay > untilTime) return false;

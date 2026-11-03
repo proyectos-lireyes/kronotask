@@ -451,11 +451,18 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                       </td>
 
                       <td className="py-3 px-4 whitespace-nowrap text-slate-500">
-                        {task.recurrence?.enabled ? (
-                          <span className="flex items-center gap-1 text-indigo-600 font-medium">
-                            <Repeat className="w-3 h-3" />
-                            {formatRecurrenceLabel(task.recurrence)}
-                          </span>
+                        {task.recurrence?.enabled || task.recurrenceSeriesId ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="flex items-center gap-1 text-indigo-600 font-medium">
+                              <Repeat className="w-3 h-3 shrink-0" />
+                              {formatRecurrenceLabel(task.recurrence)}
+                            </span>
+                            {task.recurrenceIndex && (
+                              <span className="text-[10px] text-indigo-500 font-bold">
+                                Ciclo {task.recurrenceIndex} {task.recurrenceTotal ? `de ${task.recurrenceTotal}` : ''}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-300">-</span>
                         )}
