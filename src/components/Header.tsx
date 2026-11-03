@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile, LightThemeConfig } from '../types';
+import { UserProfile, LightThemeConfig, BackgroundTone } from '../types';
 import {
   User,
   TrendingUp,
@@ -31,6 +31,7 @@ interface HeaderProps {
   onOpenBoardSelect: () => void;
   currentBoardName: string;
   currentTheme?: LightThemeConfig;
+  bgTone?: BackgroundTone;
   onUploadCloudBackup?: () => Promise<boolean>;
   onRestoreCloudBackup?: () => Promise<boolean>;
   cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
@@ -52,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBoardSelect,
   currentBoardName,
   currentTheme,
+  bgTone = 'cream',
   onUploadCloudBackup,
   onRestoreCloudBackup,
   cloudSyncStatus,
@@ -74,8 +76,15 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, [isProfileMenuOpen]);
 
+  const headerBgClass =
+    bgTone === 'cream'
+      ? 'bg-[#f7f6f2]/95 backdrop-blur-md border-b border-[#e5e3da]'
+      : bgTone === 'gray'
+      ? 'bg-[#eef0f3]/95 backdrop-blur-md border-b border-[#d8dde3]'
+      : (currentTheme?.headerColor || 'bg-white/95 backdrop-blur-md border-b border-slate-200/80');
+
   return (
-    <header className={`sticky top-0 z-30 ${currentTheme?.headerColor || 'bg-white/95 backdrop-blur-md border-b border-slate-200/80'} px-3 sm:px-6 py-2.5 shadow-2xs transition-colors duration-200`}>
+    <header className={`sticky top-0 z-30 ${headerBgClass} px-3 sm:px-6 py-2.5 shadow-2xs transition-colors duration-200`}>
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         {/* Left Side: Profile Management Button + Board Selector (ChronoTask text removed as requested) */}
         <div className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { TaskItem, CustomTag, TaskStatus, Board, CustomPriorityDefinition } from '../types';
+import { TaskItem, CustomTag, TaskStatus, Board, CustomPriorityDefinition, BackgroundTone } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { formatRecurrenceLabel } from '../utils/recurrence';
 import { sortTasksByPriorityAndUrgency, detectTaskStatusMismatch } from '../utils/prioritySort';
@@ -30,6 +30,7 @@ interface TaskListViewProps {
   isMasterView?: boolean;
   onSelectTask: (task: TaskItem) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
+  bgTone?: BackgroundTone;
 }
 
 type DeliveryFilterType = 'all' | 'overdue' | 'this_week' | 'next_week' | 'this_month';
@@ -42,6 +43,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
   isMasterView,
   onSelectTask,
   onStatusChange,
+  bgTone = 'cream',
 }) => {
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilterType>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -274,10 +276,22 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+      <div className={`rounded-2xl border overflow-hidden shadow-xs ${
+        bgTone === 'cream'
+          ? 'bg-[#faf8f2] border-[#ded8c8]'
+          : bgTone === 'gray'
+          ? 'bg-[#f4f6f9] border-[#d2d8e0]'
+          : 'bg-white border-slate-200'
+      }`}>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[11px] tracking-wider">
+            <thead className={`border-b uppercase font-bold text-[11px] tracking-wider ${
+              bgTone === 'cream'
+                ? 'bg-[#ede8db] border-[#ded8c8] text-amber-950/70'
+                : bgTone === 'gray'
+                ? 'bg-[#e7ecf2] border-[#d2d8e0] text-slate-600'
+                : 'bg-slate-50 border-slate-200 text-slate-500'
+            }`}>
               <tr>
                 <th className="py-3 px-4 w-10"></th>
                 <th className="py-3 px-4 whitespace-nowrap">Semáforo de Tiempo</th>
@@ -291,7 +305,13 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                 <th className="py-3 px-4">Etiquetas</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className={`divide-y ${
+              bgTone === 'cream'
+                ? 'divide-[#ede8db]'
+                : bgTone === 'gray'
+                ? 'divide-[#e2e7ed]'
+                : 'divide-slate-100'
+            }`}>
               {sortedTasks.length === 0 ? (
                 <tr>
                   <td colSpan={isMasterView ? 10 : 9} className="py-12 text-center text-slate-400">
@@ -311,7 +331,13 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                     <tr
                       key={task.id}
                       onClick={() => onSelectTask(task)}
-                      className="hover:bg-slate-50/80 cursor-pointer transition-colors"
+                      className={`cursor-pointer transition-colors ${
+                        bgTone === 'cream'
+                          ? 'hover:bg-[#f3efe4]'
+                          : bgTone === 'gray'
+                          ? 'hover:bg-[#ebeef3]'
+                          : 'hover:bg-slate-50/80'
+                      }`}
                     >
                       <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                         <button

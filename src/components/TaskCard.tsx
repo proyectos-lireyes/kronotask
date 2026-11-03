@@ -1,5 +1,5 @@
 import React from 'react';
-import { TaskItem, CustomTag, Board } from '../types';
+import { TaskItem, CustomTag, Board, BackgroundTone } from '../types';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { detectTaskStatusMismatch, calculateTaskUrgencyInfo, getQuadrantStyle } from '../utils/prioritySort';
 import { formatRecurrenceLabel } from '../utils/recurrence';
@@ -25,6 +25,7 @@ interface TaskCardProps {
   onSelect: (task: TaskItem) => void;
   onStatusChange: (taskId: string, newStatus: TaskItem['status']) => void;
   onDragStart?: (e: React.DragEvent, taskId: string) => void;
+  bgTone?: BackgroundTone;
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({
@@ -35,6 +36,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onSelect,
   onStatusChange,
   onDragStart,
+  bgTone = 'cream',
 }) => {
   const isDone = task.status === 'done';
   const isWaiting = task.status === 'waiting';
@@ -90,14 +92,44 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
-  // Las tarjetas tienen fondo blanco/neutro y limpio, con borde izquierdo de color por cuadrante
+  // Las tarjetas adaptan su fondo al tono elegido (Cremita, Gris o Blanco) para evitar el brillo escandaloso
   const getCardColorClass = () => {
-    if (isDone) {
-      return 'border-l-4 border-l-slate-400 border-slate-200 bg-slate-50 dark:bg-slate-800/60 text-slate-500 opacity-70';
-    }
     const qStyle = getQuadrantStyle(urgencyInfo.quadrantNumber);
-    return `border-l-4 ${qStyle.borderLeft} border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-750 text-slate-900 dark:text-slate-100 shadow-2xs hover:shadow-xs`;
+
+    if (isDone) {
+      if (bgTone === 'cream') {
+        return 'border-l-4 border-l-slate-400 border-[#dedad0] bg-[#efebe1]/70 text-slate-500 opacity-70';
+      }
+      if (bgTone === 'gray') {
+        return 'border-l-4 border-l-slate-400 border-[#d2d7de] bg-[#e4e8ee]/70 text-slate-500 opacity-70';
+      }
+      return 'border-l-4 border-l-slate-400 border-slate-200 bg-slate-50 text-slate-500 opacity-70';
+    }
+
+    if (bgTone === 'cream') {
+      return `border-l-4 ${qStyle.borderLeft} border-[#ded9cb] bg-[#faf7ef] hover:bg-[#f3efe2] text-slate-900 shadow-2xs hover:shadow-xs`;
+    }
+
+    if (bgTone === 'gray') {
+      return `border-l-4 ${qStyle.borderLeft} border-[#d6dbe2] bg-[#f5f7fa] hover:bg-[#ebeef3] text-slate-900 shadow-2xs hover:shadow-xs`;
+    }
+
+    return `border-l-4 ${qStyle.borderLeft} border-slate-200/90 bg-white hover:bg-slate-50/80 text-slate-900 shadow-2xs hover:shadow-xs`;
   };
+
+  const criticidadClass =
+    bgTone === 'cream'
+      ? 'bg-[#ece7da] text-amber-950 border-[#ddd8cb]'
+      : bgTone === 'gray'
+      ? 'bg-[#e2e7ed] text-slate-800 border-[#d2d7de]'
+      : 'bg-slate-100 text-slate-700 border-slate-200/80';
+
+  const arrowBtnHover =
+    bgTone === 'cream'
+      ? 'hover:bg-[#eae5d8] text-amber-900/60 hover:text-amber-950'
+      : bgTone === 'gray'
+      ? 'hover:bg-[#dce1e7] text-slate-600 hover:text-slate-900'
+      : 'hover:bg-slate-100 text-slate-400 hover:text-slate-800';
 
   return (
     <div
@@ -178,7 +210,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
           {/* 3. Criticidad */}
           <span
-            className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] leading-tight bg-slate-100 text-slate-700 border border-slate-200/80 shrink-0"
+            className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded font-bold text-[10px] leading-tight border shrink-0 ${criticidadClass}`}
             title={`Criticidad: ${task.priority}`}
           >
             <Flag className="w-2.5 h-2.5 text-slate-500 shrink-0" />
@@ -191,7 +223,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           <button
             type="button"
             onClick={handleMoveLeft}
-            className="p-0.5 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+            className={`p-0.5 rounded transition-colors cursor-pointer ${arrowBtnHover}`}
             title="Mover a estado anterior"
           >
             <ArrowLeft className="w-3 h-3" />
@@ -199,7 +231,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           <button
             type="button"
             onClick={handleMoveRight}
-            className="p-0.5 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+            className={`p-0.5 rounded transition-colors cursor-pointer ${arrowBtnHover}`}
             title="Mover a siguiente estado"
           >
             <ArrowRight className="w-3 h-3" />

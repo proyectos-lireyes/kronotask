@@ -10,6 +10,7 @@ import {
   TaskItem,
   ImportBoardAction,
   ImportResolutionMode,
+  BackgroundTone,
 } from '../types';
 import { LIGHT_THEMES } from '../services/storage';
 import { TIME_COLOR_LEGEND } from '../utils/timeColor';
@@ -53,6 +54,9 @@ import {
   Pencil,
   CloudUpload,
   CloudDownload,
+  Menu,
+  ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -81,6 +85,8 @@ interface SettingsModalProps {
   onUploadCloudBackup?: () => Promise<boolean>;
   onRestoreCloudBackup?: () => Promise<boolean>;
   cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
+  bgTone?: BackgroundTone;
+  onBgToneChange?: (tone: BackgroundTone) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -109,10 +115,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUploadCloudBackup,
   onRestoreCloudBackup,
   cloudSyncStatus,
+  bgTone = 'cream',
+  onBgToneChange,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme'
   >('boards');
+  const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false);
 
   // Form states
   const [newBoardName, setNewBoardName] = useState('');
@@ -348,9 +357,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setImportBase64Input('');
   };
 
+  const SECTIONS = [
+    {
+      id: 'boards' as const,
+      label: 'Tableros',
+      description: 'Crear, renombrar y organizar tableros de trabajo',
+      icon: FolderKanban,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+    },
+    {
+      id: 'transfer' as const,
+      label: 'Compartir y Respaldo',
+      description: 'Exportar e importar Base64 o Sincronizar en la nube',
+      icon: Share2,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-50',
+    },
+    {
+      id: 'theme' as const,
+      label: 'Tono de Fondo y Tema',
+      description: 'Fondo Cremita, Gris o Blanco y densidad visual',
+      icon: Palette,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50',
+    },
+    {
+      id: 'semaforo' as const,
+      label: 'Semáforo de Tiempo',
+      description: 'Código de colores y alertas de vencimiento',
+      icon: Clock,
+      color: 'text-amber-500',
+      bg: 'bg-amber-50',
+    },
+    {
+      id: 'biometria' as const,
+      label: 'Biometría y Seguridad',
+      description: 'Huella / FaceID y bloqueo de la bóveda',
+      icon: Fingerprint,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+      badge: biometricRecord.registered ? 'Activo' : undefined,
+    },
+    {
+      id: 'types' as const,
+      label: 'Tipos de Tarea',
+      description: 'Categorías y estilos visuales',
+      icon: Layers,
+      color: 'text-cyan-600',
+      bg: 'bg-cyan-50',
+    },
+    {
+      id: 'priorities' as const,
+      label: 'Prioridades / Criticidad',
+      description: 'Niveles de criticidad y colores',
+      icon: Flag,
+      color: 'text-rose-600',
+      bg: 'bg-rose-50',
+    },
+    {
+      id: 'tags' as const,
+      label: 'Etiquetas',
+      description: 'Etiquetas personalizadas para filtrar',
+      icon: Tag,
+      color: 'text-teal-600',
+      bg: 'bg-teal-50',
+    },
+  ];
+
+  const currentSection = SECTIONS.find((s) => s.id === activeTab) || SECTIONS[0];
+  const ActiveIcon = currentSection.icon;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-3xl sm:rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-3xl sm:rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] relative">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -360,7 +440,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div>
               <h2 className="text-base font-bold text-slate-900">Ajustes Generales</h2>
               <p className="text-xs text-slate-500">
-                Tableros, exportar/importar Base64, semáforo, biometría y diseño
+                Tableros, respaldo Base64, fondo y tema, semáforo y seguridad
               </p>
             </div>
           </div>
@@ -372,114 +452,136 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Scrollable Navigation Tabs */}
-        <div className="flex items-center gap-1 px-3 sm:px-6 border-b border-slate-100 bg-white text-xs font-bold overflow-x-auto no-scrollbar shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveTab('boards')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'boards'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <FolderKanban className="w-3.5 h-3.5" />
-            Tableros
-          </button>
+        {/* Section Navigation Bar: Hamburger Menu Button & Section Selector (Elimina desplazamiento horizontal) */}
+        <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 border-b border-slate-100 bg-slate-50/60 shrink-0 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Hamburger Button to Deploy Pre-modal / Menu */}
+            <button
+              type="button"
+              onClick={() => setIsSectionMenuOpen(true)}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+              title="Abrir menú de secciones de ajustes"
+            >
+              <Menu className="w-4 h-4" />
+              <span>Menú Secciones</span>
+              <ChevronDown className="w-3.5 h-3.5 text-blue-200" />
+            </button>
 
-          {/* New Transfer Tab: Export & Import in Base64 */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('transfer')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'transfer'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Share2 className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Compartir (Base64)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('semaforo')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'semaforo'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-amber-500" />
-            Semáforo
-          </button>
+            {/* Current Active Section Indicator Badge (Also clickable to open premodal) */}
+            <button
+              type="button"
+              onClick={() => setIsSectionMenuOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 transition-colors text-xs font-bold text-slate-800 cursor-pointer shadow-2xs min-w-0 truncate"
+              title="Cambiar sección"
+            >
+              <ActiveIcon className={`w-3.5 h-3.5 ${currentSection.color} shrink-0`} />
+              <span className="truncate">{currentSection.label}</span>
+              {currentSection.badge && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              )}
+            </button>
+          </div>
 
           <button
             type="button"
-            onClick={() => setActiveTab('biometria')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'biometria'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
+            onClick={() => setIsSectionMenuOpen(true)}
+            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 items-center gap-1 cursor-pointer shrink-0 hidden sm:flex"
           >
-            <Fingerprint className="w-3.5 h-3.5 text-indigo-600" />
-            Biometría
-            {biometricRecord.registered && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('types')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'types'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            Tipos
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('priorities')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'priorities'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Flag className="w-3.5 h-3.5" />
-            Prioridades
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('tags')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'tags'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Tag className="w-3.5 h-3.5" />
-            Etiquetas
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('theme')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'theme'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Palette className="w-3.5 h-3.5" />
-            Diseño
+            <span>Ver todas</span>
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        {/* Premodal / Menú Desplegable de Secciones */}
+        {isSectionMenuOpen && (
+          <div className="absolute inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-100">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150">
+              <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs">
+                    <Menu className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Secciones de Ajustes</h3>
+                    <p className="text-[11px] text-slate-500">Selecciona la sección que deseas abrir</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSectionMenuOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3 sm:p-4 overflow-y-auto space-y-1.5 flex-1">
+                {SECTIONS.map((sec) => {
+                  const SecIcon = sec.icon;
+                  const isSelected = activeTab === sec.id;
+                  return (
+                    <button
+                      key={sec.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(sec.id);
+                        setIsSectionMenuOpen(false);
+                      }}
+                      className={`w-full p-2.5 sm:p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-50/70 border-blue-400 shadow-2xs'
+                          : 'bg-white border-slate-200/80 hover:bg-slate-50 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`p-2 rounded-xl shrink-0 ${sec.bg}`}>
+                          <SecIcon className={`w-4 h-4 ${sec.color}`} />
+                        </div>
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`text-xs font-bold truncate ${
+                                isSelected ? 'text-blue-900 font-extrabold' : 'text-slate-800'
+                              }`}
+                            >
+                              {sec.label}
+                            </span>
+                            {sec.badge && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                {sec.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 truncate max-w-[220px] sm:max-w-[280px]">
+                            {sec.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isSelected ? (
+                        <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                          <Check className="w-3.5 h-3.5" />
+                        </div>
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsSectionMenuOpen(false)}
+                  className="px-4 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab Content */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
@@ -1319,36 +1421,168 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB: THEME */}
+          {/* TAB: THEME AND BACKGROUND TONE */}
           {activeTab === 'theme' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {LIGHT_THEMES.map((theme) => {
-                  const isSelected = currentTheme.id === theme.id;
-                  return (
-                    <button
-                      key={theme.id}
-                      onClick={() => onThemeChange(theme)}
-                      className={`p-3 rounded-2xl border-2 text-left transition-all flex items-center justify-between cursor-pointer ${
-                        isSelected
-                          ? 'border-blue-600 bg-blue-50/40 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                      }`}
-                    >
+            <div className="space-y-6">
+              {/* Selector de Tono de Fondo para descanso visual */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700">
+                    <Palette className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Tono de Fondo (Descanso Visual)
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Elige el tono general de fondo para suavizar el brillo de la pantalla y descansar la vista en jornadas de trabajo prolongadas.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Cremita Cálido */}
+                  <button
+                    type="button"
+                    onClick={() => onBgToneChange?.('cream')}
+                    className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      bgTone === 'cream'
+                        ? 'border-amber-500 bg-[#faf8f2] shadow-xs ring-2 ring-amber-400/20'
+                        : 'border-slate-200 hover:border-amber-300 bg-white'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-6 h-6 rounded-full bg-[#f6f5f0] border-2 border-amber-400 shadow-2xs flex items-center justify-center text-xs">
+                          🍦
+                        </span>
+                        {bgTone === 'cream' && (
+                          <span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
                       <div>
-                        <span className="text-xs font-bold text-slate-900 block">{theme.name}</span>
-                        <span className="text-[10px] text-slate-500 capitalize">
-                          {theme.density}
+                        <span className="text-xs font-bold text-slate-900 block">Cremita Cálido</span>
+                        <span className="text-[10px] text-amber-900 font-semibold inline-block bg-amber-100 px-1.5 py-0.5 rounded-md mt-0.5">
+                          Recomendado
                         </span>
                       </div>
-                      {isSelected && (
-                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
-                          <Check className="w-3 h-3" />
+                      <p className="text-[10px] text-slate-500 leading-snug">
+                        Tono arena cálido anti-reflejo. El más descansador para largas jornadas frente a la pantalla.
+                      </p>
+                    </div>
+                    <div className="mt-3 h-3 rounded-lg bg-[#f0eee4] border border-amber-200/80 w-full" />
+                  </button>
+
+                  {/* Gris Suave */}
+                  <button
+                    type="button"
+                    onClick={() => onBgToneChange?.('gray')}
+                    className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      bgTone === 'gray'
+                        ? 'border-slate-600 bg-[#f4f6f9] shadow-xs ring-2 ring-slate-400/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-6 h-6 rounded-full bg-[#eef0f3] border-2 border-slate-400 shadow-2xs flex items-center justify-center text-xs">
+                          🔘
                         </span>
-                      )}
-                    </button>
-                  );
-                })}
+                        {bgTone === 'gray' && (
+                          <span className="w-5 h-5 rounded-full bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">Gris Suave</span>
+                        <span className="text-[10px] text-slate-700 font-semibold inline-block bg-slate-200 px-1.5 py-0.5 rounded-md mt-0.5">
+                          Mate Moderno
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-snug">
+                        Tono neutro mate relajante. Contraste balanceado y sobrio sin resplandor blanco.
+                      </p>
+                    </div>
+                    <div className="mt-3 h-3 rounded-lg bg-[#e2e6eb] border border-slate-300/80 w-full" />
+                  </button>
+
+                  {/* Blanco Puro */}
+                  <button
+                    type="button"
+                    onClick={() => onBgToneChange?.('white')}
+                    className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      bgTone === 'white'
+                        ? 'border-blue-600 bg-white shadow-xs ring-2 ring-blue-400/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="w-6 h-6 rounded-full bg-white border-2 border-slate-300 shadow-2xs flex items-center justify-center text-xs">
+                          ⚪
+                        </span>
+                        {bgTone === 'white' && (
+                          <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">Blanco Puro</span>
+                        <span className="text-[10px] text-slate-500 font-semibold inline-block bg-slate-100 px-1.5 py-0.5 rounded-md mt-0.5">
+                          Clásico
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-snug">
+                        Fondo blanco luminoso de alto contraste clásico tradicional.
+                      </p>
+                    </div>
+                    <div className="mt-3 h-3 rounded-lg bg-white border border-slate-200 w-full" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Densidad y Temas */}
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Densidad Visual de la Interfaz
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Ajusta el espaciado y tamaño general de la interfaz según tu preferencia.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {LIGHT_THEMES.map((theme) => {
+                    const isSelected = currentTheme.id === theme.id;
+                    return (
+                      <button
+                        key={theme.id}
+                        onClick={() => onThemeChange(theme)}
+                        className={`p-3 rounded-2xl border-2 text-left transition-all flex items-center justify-between cursor-pointer ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50/40 shadow-xs'
+                            : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">{theme.name}</span>
+                          <span className="text-[10px] text-slate-500 capitalize">
+                            {theme.density}
+                          </span>
+                        </div>
+                        {isSelected && (
+                          <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}

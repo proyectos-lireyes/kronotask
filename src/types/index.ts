@@ -2,6 +2,8 @@ export type TaskStatus = 'todo' | 'in_progress' | 'waiting' | 'in_review' | 'don
 
 export type TimeColorLevel = 'green' | 'blue' | 'yellow' | 'orange' | 'red' | 'black';
 
+export type BackgroundTone = 'cream' | 'gray' | 'white';
+
 export type RecurrenceUnit = 'hours' | 'days' | 'weeks' | 'months' | 'years';
 
 export interface RecurrenceRule {

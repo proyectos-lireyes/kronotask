@@ -7,7 +7,30 @@ import {
   TaskItem,
   QuadrantConfig,
   DEFAULT_QUADRANT_CONFIG,
+  BackgroundTone,
 } from '../types';
+
+const STORAGE_BG_TONE_KEY = 'kronotask_bg_tone_v1';
+
+export function loadBackgroundTone(): BackgroundTone {
+  try {
+    const raw = localStorage.getItem(STORAGE_BG_TONE_KEY);
+    if (raw === 'cream' || raw === 'gray' || raw === 'white') {
+      return raw;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return 'cream';
+}
+
+export function saveBackgroundTone(tone: BackgroundTone) {
+  try {
+    localStorage.setItem(STORAGE_BG_TONE_KEY, tone);
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 const STORAGE_TASKS_KEY = 'kronotask_tasks_v5';
 const STORAGE_TAGS_KEY = 'kronotask_tags_v5';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { TaskItem, CustomTag, Board, TaskStatus, CustomPriorityDefinition, QuadrantConfig, DEFAULT_QUADRANT_CONFIG } from '../types';
+import { TaskItem, CustomTag, Board, TaskStatus, CustomPriorityDefinition, QuadrantConfig, DEFAULT_QUADRANT_CONFIG, BackgroundTone } from '../types';
 import { TaskCard } from './TaskCard';
 import { calculateTimeLevel } from '../utils/timeColor';
 import { getTaskPriorityScore, sortTasksByPriorityAndUrgency, calculateTaskUrgencyInfo } from '../utils/prioritySort';
@@ -23,6 +23,7 @@ interface EisenhowerMatrixViewProps {
   allBoards?: Board[];
   allPriorities?: CustomPriorityDefinition[];
   quadrantConfig?: QuadrantConfig;
+  bgTone?: BackgroundTone;
   isMasterView?: boolean;
   onSelectTask: (task: TaskItem) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
@@ -269,6 +270,7 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
   allBoards,
   allPriorities,
   quadrantConfig = DEFAULT_QUADRANT_CONFIG,
+  bgTone = 'cream',
   isMasterView,
   onSelectTask,
   onStatusChange,
@@ -281,6 +283,27 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
   filterTag = 'all',
 }) => {
   const quadrants = getQuadrants3x3(quadrantConfig);
+
+  const quadrantBgClass =
+    bgTone === 'cream'
+      ? 'bg-[#ede8db] dark:bg-slate-900'
+      : bgTone === 'gray'
+      ? 'bg-[#e7ecf2] dark:bg-slate-900'
+      : 'bg-white dark:bg-slate-900';
+
+  const iconBgClass =
+    bgTone === 'cream'
+      ? 'bg-[#e2dcce]'
+      : bgTone === 'gray'
+      ? 'bg-[#dbe1e9]'
+      : 'bg-white';
+
+  const emptyPlaceholderClass =
+    bgTone === 'cream'
+      ? 'border-[#ded8c8] bg-[#e2dcce]/40 text-amber-950/40'
+      : bgTone === 'gray'
+      ? 'border-[#d0d6df] bg-[#dbe1e9]/40 text-slate-500'
+      : 'border-slate-200/80 bg-white/40 text-slate-400';
 
   // Filter active tasks
   const filteredTasks = tasks.filter((t) => {
@@ -340,12 +363,12 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                 key={q.id}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDropOn3x3Cell(e, q.id)}
-                className={`rounded-2xl border-2 ${q.borderColor} bg-white dark:bg-slate-900 p-2 sm:p-2.5 flex flex-col min-h-[60px] max-w-full resize-y overflow-auto transition-all shadow-2xs relative group`}
+                className={`rounded-2xl border-2 ${q.borderColor} ${quadrantBgClass} p-2 sm:p-2.5 flex flex-col min-h-[60px] max-w-full resize-y overflow-auto transition-all shadow-2xs relative group`}
               >
                 {/* Cell Header */}
                 <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200/80">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className={`p-1.5 rounded-xl bg-white shadow-2xs shrink-0 ${q.accentColor}`}>
+                    <div className={`p-1.5 rounded-xl ${iconBgClass} shadow-2xs shrink-0 ${q.accentColor}`}>
                       <IconComp className="w-4 h-4" />
                     </div>
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -362,7 +385,7 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                 {/* Task List */}
                 <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[420px] pr-0.5">
                   {cellTasks.length === 0 ? (
-                    <div className="h-32 flex flex-col items-center justify-center text-center p-3 border-2 border-dashed border-slate-200/80 rounded-xl bg-white/40 text-slate-400">
+                    <div className={`h-32 flex flex-col items-center justify-center text-center p-3 border-2 border-dashed rounded-xl ${emptyPlaceholderClass}`}>
                       <IconComp className="w-6 h-6 mb-1 opacity-30 text-slate-400" />
                       <p className="text-[11px] font-bold text-slate-500">Sin tareas aquí</p>
                     </div>
@@ -377,6 +400,7 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                         onSelect={onSelectTask}
                         onStatusChange={onStatusChange}
                         onDragStart={handleDragStart}
+                        bgTone={bgTone}
                       />
                     ))
                   )}

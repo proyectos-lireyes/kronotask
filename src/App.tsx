@@ -16,6 +16,7 @@ import {
   CustomTypeDefinition,
   CustomPriorityDefinition,
   QuadrantConfig,
+  BackgroundTone,
 } from './types';
 import {
   loadTasks,
@@ -34,6 +35,8 @@ import {
   saveAcceptedCollisions,
   loadQuadrantConfig,
   saveQuadrantConfig,
+  loadBackgroundTone,
+  saveBackgroundTone,
 } from './services/storage';
 import { initAuth, googleSignIn, logout, saveUserDataToCloud, fetchUserDataFromCloud, getStoredUserProfile } from './services/firebase';
 import { getBiometricRecord, isVaultLocked, setVaultLocked } from './services/biometrics';
@@ -105,7 +108,13 @@ export default function App() {
   const [priorities, setPriorities] = useState<CustomPriorityDefinition[]>(() => loadCustomPriorities());
   const [tags, setTags] = useState<CustomTag[]>(() => loadTags());
   const [theme, setTheme] = useState<LightThemeConfig>(() => loadTheme());
+  const [bgTone, setBgTone] = useState<BackgroundTone>(() => loadBackgroundTone());
   const [acceptedCollisions, setAcceptedCollisions] = useState<string[]>(() => loadAcceptedCollisions());
+
+  const handleBgToneChange = (tone: BackgroundTone) => {
+    setBgTone(tone);
+    saveBackgroundTone(tone);
+  };
 
   // User Auth & Biometrics
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUserProfile());
@@ -871,8 +880,15 @@ export default function App() {
     return true;
   });
 
+  const appBgClass =
+    bgTone === 'cream'
+      ? 'bg-[#f6f5f0]'
+      : bgTone === 'gray'
+      ? 'bg-[#eef0f3]'
+      : (theme?.accentBg || 'bg-slate-50');
+
   return (
-    <div className={`min-h-screen ${theme?.accentBg || 'bg-slate-50'} text-slate-800 flex flex-col font-sans pb-20 md:pb-6 select-text transition-colors duration-200`}>
+    <div className={`min-h-screen ${appBgClass} text-slate-800 flex flex-col font-sans pb-20 md:pb-6 select-text transition-colors duration-200`}>
       {/* Clean Uncluttered Header */}
       <Header
         currentUser={currentUser}
@@ -890,6 +906,7 @@ export default function App() {
         onOpenBoardSelect={() => setIsBoardModalOpen(true)}
         currentBoardName={isMasterBoard ? 'Tablero Master' : currentBoard.name}
         currentTheme={theme}
+        bgTone={bgTone}
         onUploadCloudBackup={handleUploadCloudBackup}
         onRestoreCloudBackup={handleRestoreCloudBackup}
         cloudSyncStatus={cloudSyncStatus}
@@ -992,7 +1009,7 @@ export default function App() {
               className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 text-xs font-bold ${
                 filterColor !== 'all'
                   ? 'bg-blue-50 border-blue-300 text-blue-700'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  : 'bg-white/90 border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
               title="Filtrar por color de semáforo"
             >
@@ -1007,7 +1024,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsQuadrantSettingsModalOpen(true)}
-              className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer shrink-0 flex items-center justify-center shadow-2xs"
+              className="p-2 rounded-xl border border-slate-200 bg-white/90 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer shrink-0 flex items-center justify-center shadow-2xs"
               title="Ajustar Rangos de Q1 a Q9"
             >
               <Settings2 className="w-4 h-4 text-slate-600" />
@@ -1029,6 +1046,7 @@ export default function App() {
               setIsTaskModalOpen(true);
             }}
             onStatusChange={handleTaskStatusChange}
+            bgTone={bgTone}
           />
         )}
 
@@ -1072,6 +1090,7 @@ export default function App() {
             allBoards={boards}
             allPriorities={priorities}
             quadrantConfig={quadrantConfig}
+            bgTone={bgTone}
             isMasterView={isMasterBoard}
             searchQuery={searchQuery}
             filterPriority={filterPriority}
@@ -1232,7 +1251,13 @@ export default function App() {
       </button>
 
       {/* Mobile Pocket Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-40 ${
+        bgTone === 'cream'
+          ? 'bg-[#f7f6f2]/95 border-[#e5e3da]'
+          : bgTone === 'gray'
+          ? 'bg-[#eef0f3]/95 border-[#d8dde3]'
+          : 'bg-white/95 border-slate-200'
+      } backdrop-blur-md border-t px-2 py-1.5 flex items-center justify-around shadow-lg`}>
         {/* Matriz Eisenhower */}
         <button
           type="button"
@@ -1382,6 +1407,8 @@ export default function App() {
         onUploadCloudBackup={handleUploadCloudBackup}
         onRestoreCloudBackup={handleRestoreCloudBackup}
         cloudSyncStatus={cloudSyncStatus}
+        bgTone={bgTone}
+        onBgToneChange={handleBgToneChange}
       />
 
       {/* Notifications Modal Center */}

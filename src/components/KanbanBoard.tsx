@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TaskItem, TaskStatus, CustomTag, TimeColorLevel, Board, CustomPriorityDefinition } from '../types';
+import { TaskItem, TaskStatus, CustomTag, TimeColorLevel, Board, CustomPriorityDefinition, BackgroundTone } from '../types';
 import { TaskCard } from './TaskCard';
 import {
   Plus,
@@ -25,6 +25,7 @@ interface KanbanBoardProps {
   filterType: string;
   filterTag: string;
   searchQuery: string;
+  bgTone?: BackgroundTone;
 }
 
 interface ColumnDef {
@@ -90,6 +91,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   filterType,
   filterTag,
   searchQuery,
+  bgTone = 'cream',
 }) => {
   const [draggedOverCol, setDraggedOverCol] = useState<TaskStatus | null>(null);
   const [mobileActiveCol, setMobileActiveCol] = useState<TaskStatus>('todo');
@@ -198,8 +200,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`flex flex-col bg-slate-50/70 rounded-2xl border transition-all duration-150 min-h-[460px] ${
-                isDragOver ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-300' : 'border-slate-200/90'
+              className={`flex flex-col rounded-2xl border transition-all duration-150 min-h-[460px] ${
+                bgTone === 'cream'
+                  ? 'bg-[#ede8db]/60 border-[#ded8c8]'
+                  : bgTone === 'gray'
+                  ? 'bg-[#e7ecf2]/60 border-[#d0d6df]'
+                  : 'bg-slate-50/70 border-slate-200/90'
+              } ${
+                isDragOver ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-300' : ''
               } ${isMobileVisible ? 'flex' : 'hidden md:flex'}`}
             >
               {/* Column Header */}
@@ -232,8 +240,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               {/* Column Task List - tight spacing to fit 5 tasks on screen */}
               <div className="p-2 space-y-1.5 flex-1 overflow-y-auto max-h-[calc(100vh-250px)]">
                 {colTasks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-slate-200 rounded-xl my-auto">
-                    <p className="text-xs text-slate-400 font-medium">Sin tareas activas</p>
+                  <div className={`flex flex-col items-center justify-center p-6 text-center border-2 border-dashed rounded-xl my-auto ${
+                    bgTone === 'cream' ? 'border-[#ded8c8] text-amber-950/40' : bgTone === 'gray' ? 'border-[#d0d6df] text-slate-400' : 'border-slate-200 text-slate-400'
+                  }`}>
+                    <p className="text-xs font-medium">Sin tareas activas</p>
                     <button
                       type="button"
                       onClick={() => onAddTaskToColumn(col.id)}
@@ -256,6 +266,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         onSelect={onSelectTask}
                         onStatusChange={onStatusChange}
                         onDragStart={handleDragStart}
+                        bgTone={bgTone}
                       />
                     );
                   })
