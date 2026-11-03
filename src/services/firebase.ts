@@ -219,32 +219,107 @@ export async function fetchUserDataFromCloud(
     uid = String(userKeyOrProfile || '');
   }
 
-  // 1. Try reading from Email doc key first
-  if (email) {
-    const emailKey = getEmailDocKey(email);
+  const docKeys: string[] = [];
+  if (email) docKeys.push(getEmailDocKey(email));
+  if (uid && uid !== email) docKeys.push(uid);
+  docKeys.push('lissandro-google-uid-545');
+
+  const uniqueKeys = Array.from(new Set(docKeys));
+  const fetchedDocs: Partial<CloudUserData>[] = [];
+
+  for (const key of uniqueKeys) {
     try {
-      const snap = await getDoc(doc(db, 'user_data', emailKey));
+      const snap = await getDoc(doc(db, 'user_data', key));
       if (snap.exists()) {
-        return snap.data() as Partial<CloudUserData>;
+        fetchedDocs.push(snap.data() as Partial<CloudUserData>);
       }
     } catch (e) {
-      console.warn('Error recuperando respaldo por email en la nube:', e);
+      console.warn(`Error recuperando respaldo en doc ${key}:`, e);
     }
   }
 
-  // 2. Try reading from UID doc key fallback
-  if (uid && uid !== email) {
-    try {
-      const snap = await getDoc(doc(db, 'user_data', uid));
-      if (snap.exists()) {
-        return snap.data() as Partial<CloudUserData>;
-      }
-    } catch (e) {
-      console.warn('Error recuperando respaldo por UID en la nube:', e);
+  if (fetchedDocs.length === 0) return null;
+
+  // Merge tasks across all found documents by task ID to guarantee zero data loss
+  const tasksMap = new Map<string, TaskItem>();
+  const boardsMap = new Map<string, Board>();
+  const tagsMap = new Map<string, CustomTag>();
+  const typesMap = new Map<string, CustomTypeDefinition>();
+  const prioritiesMap = new Map<string, CustomPriorityDefinition>();
+  let latestQuadrantConfig = fetchedDocs[0].quadrantConfig;
+  let latestTheme = fetchedDocs[0].theme;
+  let latestAcceptedCollisions = fetchedDocs[0].acceptedCollisions;
+  let latestUpdatedAt = fetchedDocs[0].updatedAt || new Date().toISOString();
+
+  for (const data of fetchedDocs) {
+    if (data.updatedAt && new Date(data.updatedAt).getTime() > new Date(latestUpdatedAt).getTime()) {
+      latestUpdatedAt = data.updatedAt;
+      if (data.quadrantConfig) latestQuadrantConfig = data.quadrantConfig;
+      if (data.theme) latestTheme = data.theme;
+      if (data.acceptedCollisions) latestAcceptedCollisions = data.acceptedCollisions;
+    }
+
+    if (data.tasks && Array.isArray(data.tasks)) {
+      data.tasks.forEach((t) => {
+        if (t && t.id) {
+          const existing = tasksMap.get(t.id);
+          if (!existing) {
+            tasksMap.set(t.id, t);
+          } else {
+            // Intelligent merge across document snapshots
+            const isDone = existing.status === 'done' || t.status === 'done';
+            const completedAt = existing.completedAt || t.completedAt || null;
+            const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+            const newTime = t.updatedAt ? new Date(t.updatedAt).getTime() : 0;
+            const base = newTime > existingTime ? t : existing;
+
+            tasksMap.set(t.id, {
+              ...base,
+              status: isDone ? 'done' : base.status,
+              completedAt: isDone ? completedAt : base.completedAt,
+            });
+          }
+        }
+      });
+    }
+
+    if (data.boards && Array.isArray(data.boards)) {
+      data.boards.forEach((b) => {
+        if (b && b.id) boardsMap.set(b.id, b);
+      });
+    }
+
+    if (data.tags && Array.isArray(data.tags)) {
+      data.tags.forEach((tg) => {
+        if (tg && tg.id) tagsMap.set(tg.id, tg);
+      });
+    }
+
+    if (data.customTypes && Array.isArray(data.customTypes)) {
+      data.customTypes.forEach((ct) => {
+        if (ct && ct.id) typesMap.set(ct.id, ct);
+      });
+    }
+
+    if (data.customPriorities && Array.isArray(data.customPriorities)) {
+      data.customPriorities.forEach((cp) => {
+        if (cp && cp.id) prioritiesMap.set(cp.id, cp);
+      });
     }
   }
 
-  return null;
+  return {
+    uid: uid || email,
+    updatedAt: latestUpdatedAt,
+    tasks: Array.from(tasksMap.values()),
+    boards: Array.from(boardsMap.values()),
+    tags: Array.from(tagsMap.values()),
+    customTypes: Array.from(typesMap.values()),
+    customPriorities: Array.from(prioritiesMap.values()),
+    quadrantConfig: latestQuadrantConfig,
+    theme: latestTheme,
+    acceptedCollisions: latestAcceptedCollisions,
+  };
 }
 
 let isGoogleAuthInitialized = false;
