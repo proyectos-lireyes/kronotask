@@ -490,7 +490,7 @@ export default function App() {
     }
 
     // Si se pasa a 'done' y no viene completionDate especificada, abrimos el modal para indicarla
-    if (newStatus === 'done' && task.status !== 'done' && !completionDate) {
+    if (newStatus === 'done' && !completionDate) {
       setCompletionModalTask(task);
       return;
     }

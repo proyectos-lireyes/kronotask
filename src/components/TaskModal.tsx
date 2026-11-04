@@ -97,6 +97,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [acceptedLocally, setAcceptedLocally] = useState<string[]>([]);
   const [waitingDays, setWaitingDays] = useState<number>(2);
+  const [completedAtIso, setCompletedAtIso] = useState<string>('');
 
   // Recurrence
   const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
@@ -192,6 +193,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setAttachments(task.attachments || []);
       setComments(task.comments || []);
       setWaitingDays(task.waitingDays || 2);
+      setCompletedAtIso(task.completedAt ? toDateTimeLocal(new Date(task.completedAt)) : toDateTimeLocal(new Date(task.endDate)));
     } else {
       const now = new Date();
       const inThreeDays = new Date(now.getTime() + 1000 * 60 * 60 * 72);
@@ -205,6 +207,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setType(allTypes.find(t => t.id === 'tarea' || t.name.toLowerCase() === 'tarea')?.id || 'tarea');
       setStartDate(toDateTimeLocal(now));
       setEndDate(toDateTimeLocal(inThreeDays));
+      setCompletedAtIso(toDateTimeLocal(inThreeDays));
       setSelectedTags([]);
       setWaitingDays(2);
       setRecurrenceEnabled(false);
@@ -335,7 +338,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       type,
       startDate: new Date(startDate).toISOString(),
       endDate: new Date(finalEndMs).toISOString(),
-      completedAt: status === 'done' ? (task?.completedAt || new Date().toISOString()) : null,
+      completedAt: status === 'done' ? (completedAtIso ? new Date(completedAtIso).toISOString() : new Date().toISOString()) : null,
       tags: selectedTags,
       recurrence: recurrenceEnabled
         ? {
@@ -692,6 +695,40 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       );
                     })}
                   </div>
+
+                  {status === 'done' && (
+                    <div className="mt-2.5 p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-xs animate-in fade-in duration-200 space-y-2.5">
+                      <div className="flex items-center justify-between font-bold text-emerald-950">
+                        <span className="flex items-center gap-1.5 text-xs">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          Fecha Real de Cierre Registrada:
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCompletedAtIso(toDateTimeLocal(new Date(endDate || Date.now())))}
+                          className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl text-[11px] font-bold border bg-white hover:bg-emerald-100/80 text-emerald-900 border-emerald-300 cursor-pointer shadow-2xs transition-colors"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Fecha Planificada</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCompletedAtIso(toDateTimeLocal(new Date()))}
+                          className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl text-[11px] font-bold border bg-white hover:bg-emerald-100/80 text-emerald-900 border-emerald-300 cursor-pointer shadow-2xs transition-colors"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Hora Actual (Ahora)</span>
+                        </button>
+                      </div>
+                      <CustomDateTimePicker
+                        label="Personalizar Fecha y Hora de Cierre"
+                        value={completedAtIso}
+                        onChange={(val) => setCompletedAtIso(val)}
+                      />
+                    </div>
+                  )}
 
                   {status === 'waiting' && (
                     <div className="mt-2.5 p-3 rounded-2xl bg-purple-50/80 border border-purple-200 text-xs animate-in fade-in duration-200">
