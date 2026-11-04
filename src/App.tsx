@@ -17,6 +17,7 @@ import {
   CustomPriorityDefinition,
   QuadrantConfig,
   BackgroundTone,
+  CloudBackupSnapshot,
 } from './types';
 import {
   loadTasks,
@@ -38,7 +39,16 @@ import {
   loadBackgroundTone,
   saveBackgroundTone,
 } from './services/storage';
-import { initAuth, googleSignIn, logout, saveUserDataToCloud, fetchUserDataFromCloud, getStoredUserProfile } from './services/firebase';
+import {
+  initAuth,
+  googleSignIn,
+  logout,
+  saveUserDataToCloud,
+  fetchUserDataFromCloud,
+  getStoredUserProfile,
+  fetchCloudBackupsList,
+  deleteCloudBackupSnapshot,
+} from './services/firebase';
 import { getBiometricRecord, isVaultLocked, setVaultLocked } from './services/biometrics';
 import {
   InAppNotification,
@@ -229,6 +239,8 @@ export default function App() {
   }, []);
 
   // Manual Cloud Sync State & Handlers (Controlled by user to save quota)
+  const [cloudBackups, setCloudBackups] = useState<CloudBackupSnapshot[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState<boolean>(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<{
     loading: boolean;
     lastSyncTime: string | null;
@@ -243,6 +255,25 @@ export default function App() {
     };
   });
 
+  const loadBackupsList = async () => {
+    if (!currentUser) return;
+    setIsLoadingBackups(true);
+    try {
+      const list = await fetchCloudBackupsList(currentUser);
+      setCloudBackups(list);
+    } catch (e) {
+      console.warn('Error cargando lista de respaldos:', e);
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isSettingsOpen && currentUser) {
+      loadBackupsList();
+    }
+  }, [isSettingsOpen, currentUser]);
+
   const handleUploadCloudBackup = async (): Promise<boolean> => {
     if (!currentUser) {
       setCloudSyncStatus({
@@ -255,7 +286,7 @@ export default function App() {
     }
     setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
     try {
-      await saveUserDataToCloud(currentUser, {
+      const updatedList = await saveUserDataToCloud(currentUser, {
         tasks,
         boards,
         tags,
@@ -264,13 +295,15 @@ export default function App() {
         quadrantConfig,
         theme,
         acceptedCollisions,
+        bgTone,
       });
+      setCloudBackups(updatedList);
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       localStorage.setItem('kronotask_last_cloud_sync', nowStr);
       setCloudSyncStatus({
         loading: false,
         lastSyncTime: nowStr,
-        msg: '✓ Respaldo completo subido a la nube con éxito',
+        msg: `✓ Respaldo completo guardado (${updatedList.length} de 4 copias)`,
         isError: false,
       });
       return true;
@@ -285,7 +318,7 @@ export default function App() {
     }
   };
 
-  const handleRestoreCloudBackup = async (): Promise<boolean> => {
+  const handleRestoreCloudBackup = async (snapshot?: CloudBackupSnapshot): Promise<boolean> => {
     if (!currentUser) {
       setCloudSyncStatus({
         loading: false,
@@ -297,46 +330,65 @@ export default function App() {
     }
     setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
     try {
-      const cloudData = await fetchUserDataFromCloud(currentUser);
-      if (cloudData) {
-        if (cloudData.tasks && Array.isArray(cloudData.tasks)) {
-          setTasks(cloudData.tasks);
-          saveTasks(cloudData.tasks);
+      let targetSnapshot = snapshot;
+      if (!targetSnapshot) {
+        const list = await fetchCloudBackupsList(currentUser);
+        setCloudBackups(list);
+        if (list.length > 0) {
+          targetSnapshot = list[0];
         }
-        if (cloudData.boards && Array.isArray(cloudData.boards) && cloudData.boards.length > 0) {
-          setBoards(cloudData.boards);
-          saveBoards(cloudData.boards);
+      }
+
+      if (targetSnapshot && targetSnapshot.data) {
+        const data = targetSnapshot.data;
+
+        // PURE FULL OVERWRITE - Exactly what the user requested, NO MERGING
+        const restoredTasks = Array.isArray(data.tasks) ? data.tasks : [];
+        setTasks(restoredTasks);
+        saveTasks(restoredTasks);
+
+        const restoredBoards = Array.isArray(data.boards) && data.boards.length > 0 ? data.boards : boards;
+        setBoards(restoredBoards);
+        saveBoards(restoredBoards);
+
+        const restoredTags = Array.isArray(data.tags) ? data.tags : [];
+        setTags(restoredTags);
+        saveTags(restoredTags);
+
+        const restoredTypes = Array.isArray(data.customTypes) && data.customTypes.length > 0 ? data.customTypes : types;
+        setTypes(restoredTypes);
+        saveCustomTypes(restoredTypes);
+
+        const restoredPriorities = Array.isArray(data.customPriorities) && data.customPriorities.length > 0 ? data.customPriorities : priorities;
+        setPriorities(restoredPriorities);
+        saveCustomPriorities(restoredPriorities);
+
+        if (data.quadrantConfig) {
+          setQuadrantConfig(data.quadrantConfig);
+          saveQuadrantConfig(data.quadrantConfig);
         }
-        if (cloudData.tags && Array.isArray(cloudData.tags)) {
-          setTags(cloudData.tags);
-          saveTags(cloudData.tags);
+
+        if (data.theme) {
+          setTheme(data.theme);
+          saveTheme(data.theme);
         }
-        if (cloudData.customTypes && Array.isArray(cloudData.customTypes)) {
-          setTypes(cloudData.customTypes);
-          saveCustomTypes(cloudData.customTypes);
+
+        if (data.acceptedCollisions && Array.isArray(data.acceptedCollisions)) {
+          setAcceptedCollisions(data.acceptedCollisions);
+          saveAcceptedCollisions(data.acceptedCollisions);
         }
-        if (cloudData.customPriorities && Array.isArray(cloudData.customPriorities)) {
-          setPriorities(cloudData.customPriorities);
-          saveCustomPriorities(cloudData.customPriorities);
+
+        if (data.bgTone) {
+          setBgTone(data.bgTone);
+          saveBackgroundTone(data.bgTone);
         }
-        if (cloudData.quadrantConfig) {
-          setQuadrantConfig(cloudData.quadrantConfig);
-          saveQuadrantConfig(cloudData.quadrantConfig);
-        }
-        if (cloudData.theme) {
-          setTheme(cloudData.theme);
-          saveTheme(cloudData.theme);
-        }
-        if (cloudData.acceptedCollisions && Array.isArray(cloudData.acceptedCollisions)) {
-          setAcceptedCollisions(cloudData.acceptedCollisions);
-          saveAcceptedCollisions(cloudData.acceptedCollisions);
-        }
+
         const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         localStorage.setItem('kronotask_last_cloud_sync', nowStr);
         setCloudSyncStatus({
           loading: false,
           lastSyncTime: nowStr,
-          msg: '✓ Copia de la nube restaurada exitosamente',
+          msg: `✓ Copia restaurada: ${restoredTasks.length} tareas sobreescritas localmente`,
           isError: false,
         });
         return true;
@@ -356,6 +408,23 @@ export default function App() {
         msg: 'Error al restaurar desde la nube',
         isError: true,
       }));
+      return false;
+    }
+  };
+
+  const handleDeleteCloudBackup = async (backupId: string): Promise<boolean> => {
+    if (!currentUser) return false;
+    try {
+      const updated = await deleteCloudBackupSnapshot(currentUser, backupId);
+      setCloudBackups(updated);
+      setCloudSyncStatus((prev) => ({
+        ...prev,
+        msg: '✓ Respaldo eliminado de la nube',
+        isError: false,
+      }));
+      return true;
+    } catch (e) {
+      console.error(e);
       return false;
     }
   };
@@ -1492,6 +1561,10 @@ export default function App() {
         onImportBoard={handleImportBoardAction}
         onUploadCloudBackup={handleUploadCloudBackup}
         onRestoreCloudBackup={handleRestoreCloudBackup}
+        cloudBackups={cloudBackups}
+        isLoadingBackups={isLoadingBackups}
+        onRefreshCloudBackups={loadBackupsList}
+        onDeleteCloudBackup={handleDeleteCloudBackup}
         cloudSyncStatus={cloudSyncStatus}
         bgTone={bgTone}
         onBgToneChange={handleBgToneChange}

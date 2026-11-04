@@ -11,6 +11,7 @@ import {
   ImportBoardAction,
   ImportResolutionMode,
   BackgroundTone,
+  CloudBackupSnapshot,
 } from '../types';
 import { LIGHT_THEMES } from '../services/storage';
 import { TIME_COLOR_LEGEND } from '../utils/timeColor';
@@ -57,6 +58,11 @@ import {
   Menu,
   ChevronRight,
   SlidersHorizontal,
+  RotateCcw,
+  RefreshCw,
+  Sparkles,
+  AlertTriangle,
+  History,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -83,7 +89,11 @@ interface SettingsModalProps {
   allTasks: TaskItem[];
   onImportBoard: (action: ImportBoardAction) => void;
   onUploadCloudBackup?: () => Promise<boolean>;
-  onRestoreCloudBackup?: () => Promise<boolean>;
+  onRestoreCloudBackup?: (snapshot?: CloudBackupSnapshot) => Promise<boolean>;
+  cloudBackups?: CloudBackupSnapshot[];
+  isLoadingBackups?: boolean;
+  onRefreshCloudBackups?: () => Promise<void>;
+  onDeleteCloudBackup?: (backupId: string) => Promise<boolean>;
   cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
   bgTone?: BackgroundTone;
   onBgToneChange?: (tone: BackgroundTone) => void;
@@ -114,6 +124,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onImportBoard,
   onUploadCloudBackup,
   onRestoreCloudBackup,
+  cloudBackups = [],
+  isLoadingBackups = false,
+  onRefreshCloudBackups,
+  onDeleteCloudBackup,
   cloudSyncStatus,
   bgTone = 'cream',
   onBgToneChange,
@@ -122,6 +136,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme'
   >('boards');
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false);
+
+  // Cloud Backups Confirmation States
+  const [backupToRestoreConfirm, setBackupToRestoreConfirm] = useState<CloudBackupSnapshot | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [backupToDeleteConfirm, setBackupToDeleteConfirm] = useState<CloudBackupSnapshot | null>(null);
+  const [isDeletingBackup, setIsDeletingBackup] = useState(false);
+
+  const formatBackupDate = (isoString: string) => {
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleDateString('es-ES', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return isoString;
+    }
+  };
+
+  const formatRelativeTime = (isoString: string) => {
+    try {
+      const ms = Date.now() - new Date(isoString).getTime();
+      const mins = Math.floor(ms / (1000 * 60));
+      const hours = Math.floor(mins / 60);
+      const days = Math.floor(hours / 24);
+      if (days > 0) return `hace ${days}d`;
+      if (hours > 0) return `hace ${hours}h`;
+      if (mins > 0) return `hace ${mins}m`;
+      return 'hace instantes';
+    } catch {
+      return '';
+    }
+  };
 
   // Form states
   const [newBoardName, setNewBoardName] = useState('');
@@ -588,67 +640,184 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB: EXPORT / IMPORT BASE64 AND CLOUD SYNC */}
           {activeTab === 'transfer' && (
             <div className="space-y-4">
-              {/* Google Cloud Manual Backup Section */}
-              <div className="bg-gradient-to-br from-indigo-50/80 to-blue-50/80 p-4 rounded-2xl border border-indigo-200/80 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-indigo-600 text-white rounded-lg shadow-xs">
+              {/* Google Cloud Full Backup & Snapshot Rotation Section */}
+              <div className="bg-gradient-to-br from-indigo-50/90 via-slate-50 to-blue-50/90 p-4 rounded-3xl border border-indigo-200/90 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
                       <CloudUpload className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-slate-900">Sincronización Manual (Google Cloud)</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xs sm:text-sm font-black text-slate-900">Respaldos en la Nube (Google Cloud)</h3>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          Máx 4 copias
+                        </span>
+                      </div>
                       <p className="text-[11px] text-slate-500">
-                        Sincronización a demanda para ahorrar cuota de transferencia y cuota gratuita de Firebase.
+                        Cada respaldo es una copia 100% completa. Al restaurar, se sobreescribe el estado local sin fusionar.
                       </p>
                     </div>
                   </div>
-                  {cloudSyncStatus?.lastSyncTime && (
-                    <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
-                      Última: {cloudSyncStatus.lastSyncTime}
-                    </span>
+                  {onRefreshCloudBackups && (
+                    <button
+                      type="button"
+                      disabled={isLoadingBackups}
+                      onClick={onRefreshCloudBackups}
+                      className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer shrink-0"
+                      title="Refrescar lista de respaldos"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingBackups ? 'animate-spin text-indigo-600' : ''}`} />
+                    </button>
                   )}
                 </div>
 
                 {currentUser ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
+                    {/* Status Alert Banner */}
                     {cloudSyncStatus?.msg && (
                       <div
-                        className={`p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${
+                        className={`p-2.5 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-2xs ${
                           cloudSyncStatus.isError
                             ? 'bg-rose-100 text-rose-800 border border-rose-200'
                             : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}
                       >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>{cloudSyncStatus.msg}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {cloudSyncStatus.isError ? (
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          ) : (
+                            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                          )}
+                          <span className="truncate">{cloudSyncStatus.msg}</span>
+                        </div>
+                        {cloudSyncStatus.lastSyncTime && (
+                          <span className="text-[10px] opacity-80 shrink-0 font-medium">
+                            {cloudSyncStatus.lastSyncTime}
+                          </span>
+                        )}
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        disabled={cloudSyncStatus?.loading}
-                        onClick={onUploadCloudBackup}
-                        className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-md shadow-blue-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <CloudUpload className="w-4 h-4" />
-                        <span>Subir Copia a la Nube</span>
-                      </button>
+                    {/* Action: Create New Full Backup */}
+                    <button
+                      type="button"
+                      disabled={cloudSyncStatus?.loading}
+                      onClick={onUploadCloudBackup}
+                      className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-black rounded-2xl text-xs shadow-md shadow-blue-200 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99]"
+                    >
+                      <CloudUpload className="w-4 h-4" />
+                      <span>Subir Nueva Copia Completa (Respaldar {allTasks.length} Tareas)</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        disabled={cloudSyncStatus?.loading}
-                        onClick={onRestoreCloudBackup}
-                        className="py-2.5 px-3 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50 text-slate-800 font-bold rounded-xl text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <CloudDownload className="w-4 h-4 text-indigo-600" />
-                        <span>Restaurar de la Nube</span>
-                      </button>
+                    <p className="text-[10px] text-slate-500 font-medium text-center">
+                      ℹ️ El respaldo más nuevo se guardará al principio. Si ya tienes 4 respaldos, el más antiguo se rotará y eliminará automáticamente.
+                    </p>
+
+                    {/* Backups History List */}
+                    <div className="pt-2 border-t border-indigo-100/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <History className="w-3.5 h-3.5 text-indigo-600" />
+                          Historial de Respaldos ({cloudBackups.length} de 4 disponibles)
+                        </span>
+                      </div>
+
+                      {isLoadingBackups ? (
+                        <div className="p-4 bg-white/70 rounded-2xl border border-slate-200 flex items-center justify-center gap-2 text-xs text-slate-500">
+                          <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                          <span>Cargando respaldos disponibles en la nube...</span>
+                        </div>
+                      ) : cloudBackups.length === 0 ? (
+                        <div className="p-4 bg-white/70 rounded-2xl border border-dashed border-slate-300 text-center space-y-1">
+                          <p className="text-xs font-bold text-slate-700">Aún no hay respaldos en la nube</p>
+                          <p className="text-[11px] text-slate-500">
+                            Presiona "Subir Nueva Copia Completa" para crear tu primer respaldo.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {cloudBackups.map((backup, idx) => {
+                            const isNewest = idx === 0;
+                            const isOldest = idx === cloudBackups.length - 1 && cloudBackups.length >= 4;
+                            return (
+                              <div
+                                key={backup.id}
+                                className={`p-3 bg-white rounded-2xl border transition-all shadow-2xs space-y-2 ${
+                                  isNewest ? 'border-emerald-300 ring-1 ring-emerald-200/60' : 'border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${
+                                      isNewest
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                        : isOldest
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-slate-100 text-slate-700'
+                                    }`}>
+                                      {isNewest ? '⭐ Copia #1 (Más Reciente)' : isOldest ? `Copia #${idx + 1} (Próx. a rotar)` : `Copia #${idx + 1}`}
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-800 truncate">
+                                      {formatBackupDate(backup.createdAt)}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                      {backup.deviceInfo || 'Nube'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      {formatRelativeTime(backup.createdAt)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Counts chips */}
+                                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                                  <span className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-800 font-bold border border-blue-100">
+                                    📋 {backup.taskCount} tareas
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-100">
+                                    ✅ {backup.completedTaskCount} completadas
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+                                    📁 {backup.boardCount} tableros
+                                  </span>
+                                </div>
+
+                                {/* Actions row */}
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                                  <button
+                                    type="button"
+                                    onClick={() => setBackupToRestoreConfirm(backup)}
+                                    className="py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    <span>Restaurar y Sobreescribir Local</span>
+                                  </button>
+
+                                  {onDeleteCloudBackup && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setBackupToDeleteConfirm(backup)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                                      title="Eliminar este respaldo de la nube"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
-                  <div className="p-2.5 bg-white/80 rounded-xl border border-indigo-100 text-xs text-slate-600 flex items-center justify-between">
-                    <span>Inicia sesión con Google para usar el respaldo manual en la nube.</span>
+                  <div className="p-3 bg-white/90 rounded-2xl border border-indigo-100 text-xs text-slate-600 flex items-center justify-between">
+                    <span>Inicia sesión con Google para acceder al historial de respaldos en la nube.</span>
                   </div>
                 )}
               </div>
@@ -1597,6 +1766,129 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Pre-Restore Full Overwrite Confirmation Modal */}
+      {backupToRestoreConfirm && (
+        <div className="fixed inset-0 z-70 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150 space-y-4 p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-800 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900">
+                  ¿Restaurar y sobreescribir datos locales?
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Esta acción reemplazará por completo la información de tu dispositivo actual por el respaldo seleccionado.
+                </p>
+              </div>
+            </div>
+
+            {/* Backup Summary Box */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="font-semibold">Fecha del Respaldo:</span>
+                <span className="font-bold text-slate-900">{formatBackupDate(backupToRestoreConfirm.createdAt)}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="font-semibold">Dispositivo de Origen:</span>
+                <span className="font-bold text-slate-900">{backupToRestoreConfirm.deviceInfo || 'Nube'}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 pt-1.5 border-t border-slate-200/80">
+                <span className="font-semibold">Contenido a Cargar:</span>
+                <span className="font-black text-indigo-700">
+                  {backupToRestoreConfirm.taskCount} tareas • {backupToRestoreConfirm.boardCount} tableros
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed font-medium">
+              ⚠️ <strong>Sobreescritura total:</strong> Las tareas actuales de este dispositivo se eliminarán y se reemplazarán al 100% por las del respaldo (sin duplicar ni fusionar).
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isRestoring}
+                onClick={() => setBackupToRestoreConfirm(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isRestoring}
+                onClick={async () => {
+                  if (!onRestoreCloudBackup || !backupToRestoreConfirm) return;
+                  setIsRestoring(true);
+                  try {
+                    await onRestoreCloudBackup(backupToRestoreConfirm);
+                    setBackupToRestoreConfirm(null);
+                  } finally {
+                    setIsRestoring(false);
+                  }
+                }}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-200 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isRestoring ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Sobreescribiendo...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Sí, Sobreescribir y Restaurar</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Single Backup Confirmation Modal */}
+      {backupToDeleteConfirm && (
+        <div className="fixed inset-0 z-70 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 p-5 space-y-4">
+            <div className="flex items-center gap-2.5 text-rose-600">
+              <Trash2 className="w-5 h-5 shrink-0" />
+              <h3 className="text-sm font-black text-slate-900">¿Eliminar este respaldo?</h3>
+            </div>
+            <p className="text-xs text-slate-600">
+              Se eliminará de la nube la copia del <strong>{formatBackupDate(backupToDeleteConfirm.createdAt)}</strong> con {backupToDeleteConfirm.taskCount} tareas.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isDeletingBackup}
+                onClick={() => setBackupToDeleteConfirm(null)}
+                className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingBackup}
+                onClick={async () => {
+                  if (!onDeleteCloudBackup || !backupToDeleteConfirm) return;
+                  setIsDeletingBackup(true);
+                  try {
+                    await onDeleteCloudBackup(backupToDeleteConfirm.id);
+                    setBackupToDeleteConfirm(null);
+                  } finally {
+                    setIsDeletingBackup(false);
+                  }
+                }}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50"
+              >
+                {isDeletingBackup ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Export Board Selection Modal Picker */}
       <OptionPickerModal

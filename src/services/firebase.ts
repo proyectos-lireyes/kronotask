@@ -23,6 +23,8 @@ import {
   CustomPriorityDefinition,
   QuadrantConfig,
   LightThemeConfig,
+  CloudBackupSnapshot,
+  BackgroundTone,
 } from '../types';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -142,7 +144,9 @@ export const initAuth = (
 
 export interface CloudUserData {
   uid: string;
+  email?: string;
   updatedAt: string;
+  backups?: CloudBackupSnapshot[];
   boards?: Board[];
   tasks?: TaskItem[];
   tags?: CustomTag[];
@@ -151,64 +155,16 @@ export interface CloudUserData {
   quadrantConfig?: QuadrantConfig;
   theme?: LightThemeConfig;
   acceptedCollisions?: string[];
+  bgTone?: BackgroundTone;
 }
 
 export function getEmailDocKey(email: string): string {
   return `email_${email.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
 }
 
-export async function saveUserDataToCloud(
-  userKeyOrProfile: string | { uid?: string; email?: string },
-  data: Partial<CloudUserData>
-) {
-  let uid = '';
-  let email = '';
-
-  if (typeof userKeyOrProfile === 'object' && userKeyOrProfile !== null) {
-    uid = userKeyOrProfile.uid || '';
-    email = userKeyOrProfile.email || '';
-  } else {
-    uid = String(userKeyOrProfile || '');
-  }
-
-  if (!uid && !email) {
-    throw new Error('No hay perfil de usuario activo para sincronizar.');
-  }
-
-  const rawPayload = {
-    uid: uid || email,
-    email: email || '',
-    updatedAt: new Date().toISOString(),
-    ...data,
-  };
-
-  // Strip all undefined properties to prevent Firestore setDoc "invalid data / undefined field" errors
-  const payload = JSON.parse(JSON.stringify(rawPayload));
-
-  const writePromises: Promise<any>[] = [];
-
-  // 1. Primary: Email-based document key (enables 100% cross-platform Android & Web sync)
-  if (email) {
-    const emailKey = getEmailDocKey(email);
-    writePromises.push(setDoc(doc(db, 'user_data', emailKey), payload, { merge: true }));
-  }
-
-  // 2. Secondary: Direct UID document key fallback
-  if (uid && uid !== email) {
-    writePromises.push(setDoc(doc(db, 'user_data', uid), payload, { merge: true }));
-  }
-
-  try {
-    await Promise.all(writePromises);
-  } catch (e: any) {
-    console.error('Error guardando copia de respaldo en la nube:', e);
-    throw e;
-  }
-}
-
-export async function fetchUserDataFromCloud(
+export async function fetchCloudBackupsList(
   userKeyOrProfile: string | { uid?: string; email?: string }
-): Promise<Partial<CloudUserData> | null> {
+): Promise<CloudBackupSnapshot[]> {
   let uid = '';
   let email = '';
 
@@ -225,102 +181,210 @@ export async function fetchUserDataFromCloud(
   docKeys.push('lissandro-google-uid-545');
 
   const uniqueKeys = Array.from(new Set(docKeys));
-  const fetchedDocs: Partial<CloudUserData>[] = [];
 
   for (const key of uniqueKeys) {
     try {
       const snap = await getDoc(doc(db, 'user_data', key));
       if (snap.exists()) {
-        fetchedDocs.push(snap.data() as Partial<CloudUserData>);
+        const data = snap.data() as Partial<CloudUserData>;
+        if (data.backups && Array.isArray(data.backups) && data.backups.length > 0) {
+          // Sort newest first
+          return [...data.backups].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          ).slice(0, 4);
+        }
+
+        // If no backups array but has legacy tasks/boards, wrap as baseline backup
+        if (data.tasks || data.boards) {
+          const legacyTasks = Array.isArray(data.tasks) ? data.tasks : [];
+          const legacyBoards = Array.isArray(data.boards) ? data.boards : [];
+          const completedCount = legacyTasks.filter((t) => t.status === 'done').length;
+
+          const synthesizedBackup: CloudBackupSnapshot = {
+            id: 'backup_initial_cloud',
+            createdAt: data.updatedAt || new Date().toISOString(),
+            deviceInfo: 'Copia Previa Nube',
+            taskCount: legacyTasks.length,
+            completedTaskCount: completedCount,
+            boardCount: legacyBoards.length,
+            data: {
+              tasks: legacyTasks,
+              boards: legacyBoards,
+              tags: Array.isArray(data.tags) ? data.tags : [],
+              customTypes: data.customTypes || [],
+              customPriorities: data.customPriorities || [],
+              quadrantConfig: data.quadrantConfig,
+              theme: data.theme,
+              acceptedCollisions: data.acceptedCollisions || [],
+              bgTone: data.bgTone || 'cream',
+            },
+          };
+          return [synthesizedBackup];
+        }
       }
     } catch (e) {
-      console.warn(`Error recuperando respaldo en doc ${key}:`, e);
+      console.warn(`Error leyendo respaldos en doc ${key}:`, e);
     }
   }
 
-  if (fetchedDocs.length === 0) return null;
-
-  // Merge tasks across all found documents by task ID to guarantee zero data loss
-  const tasksMap = new Map<string, TaskItem>();
-  const boardsMap = new Map<string, Board>();
-  const tagsMap = new Map<string, CustomTag>();
-  const typesMap = new Map<string, CustomTypeDefinition>();
-  const prioritiesMap = new Map<string, CustomPriorityDefinition>();
-  let latestQuadrantConfig = fetchedDocs[0].quadrantConfig;
-  let latestTheme = fetchedDocs[0].theme;
-  let latestAcceptedCollisions = fetchedDocs[0].acceptedCollisions;
-  let latestUpdatedAt = fetchedDocs[0].updatedAt || new Date().toISOString();
-
-  for (const data of fetchedDocs) {
-    if (data.updatedAt && new Date(data.updatedAt).getTime() > new Date(latestUpdatedAt).getTime()) {
-      latestUpdatedAt = data.updatedAt;
-      if (data.quadrantConfig) latestQuadrantConfig = data.quadrantConfig;
-      if (data.theme) latestTheme = data.theme;
-      if (data.acceptedCollisions) latestAcceptedCollisions = data.acceptedCollisions;
-    }
-
-    if (data.tasks && Array.isArray(data.tasks)) {
-      data.tasks.forEach((t) => {
-        if (t && t.id) {
-          const existing = tasksMap.get(t.id);
-          if (!existing) {
-            tasksMap.set(t.id, t);
-          } else {
-            // Intelligent merge across document snapshots
-            const isDone = existing.status === 'done' || t.status === 'done';
-            const completedAt = existing.completedAt || t.completedAt || null;
-            const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
-            const newTime = t.updatedAt ? new Date(t.updatedAt).getTime() : 0;
-            const base = newTime > existingTime ? t : existing;
-
-            tasksMap.set(t.id, {
-              ...base,
-              status: isDone ? 'done' : base.status,
-              completedAt: isDone ? completedAt : base.completedAt,
-            });
-          }
-        }
-      });
-    }
-
-    if (data.boards && Array.isArray(data.boards)) {
-      data.boards.forEach((b) => {
-        if (b && b.id) boardsMap.set(b.id, b);
-      });
-    }
-
-    if (data.tags && Array.isArray(data.tags)) {
-      data.tags.forEach((tg) => {
-        if (tg && tg.id) tagsMap.set(tg.id, tg);
-      });
-    }
-
-    if (data.customTypes && Array.isArray(data.customTypes)) {
-      data.customTypes.forEach((ct) => {
-        if (ct && ct.id) typesMap.set(ct.id, ct);
-      });
-    }
-
-    if (data.customPriorities && Array.isArray(data.customPriorities)) {
-      data.customPriorities.forEach((cp) => {
-        if (cp && cp.id) prioritiesMap.set(cp.id, cp);
-      });
-    }
-  }
-
-  return {
-    uid: uid || email,
-    updatedAt: latestUpdatedAt,
-    tasks: Array.from(tasksMap.values()),
-    boards: Array.from(boardsMap.values()),
-    tags: Array.from(tagsMap.values()),
-    customTypes: Array.from(typesMap.values()),
-    customPriorities: Array.from(prioritiesMap.values()),
-    quadrantConfig: latestQuadrantConfig,
-    theme: latestTheme,
-    acceptedCollisions: latestAcceptedCollisions,
-  };
+  return [];
 }
+
+export async function saveUserDataToCloud(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  data: {
+    tasks: TaskItem[];
+    boards: Board[];
+    tags: CustomTag[];
+    customTypes?: CustomTypeDefinition[];
+    customPriorities?: CustomPriorityDefinition[];
+    quadrantConfig?: QuadrantConfig;
+    theme?: LightThemeConfig;
+    acceptedCollisions?: string[];
+    bgTone?: BackgroundTone;
+  }
+): Promise<CloudBackupSnapshot[]> {
+  let uid = '';
+  let email = '';
+
+  if (typeof userKeyOrProfile === 'object' && userKeyOrProfile !== null) {
+    uid = userKeyOrProfile.uid || '';
+    email = userKeyOrProfile.email || '';
+  } else {
+    uid = String(userKeyOrProfile || '');
+  }
+
+  if (!uid && !email) {
+    throw new Error('No hay perfil de usuario activo para sincronizar.');
+  }
+
+  // 1. Fetch current backups list to apply FIFO (max 4)
+  const existingBackups = await fetchCloudBackupsList(userKeyOrProfile);
+
+  const completedCount = (data.tasks || []).filter((t) => t.status === 'done').length;
+  const isAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+
+  const newSnapshot: CloudBackupSnapshot = {
+    id: `backup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    createdAt: new Date().toISOString(),
+    deviceInfo: isAndroid ? 'Android' : 'Web',
+    taskCount: (data.tasks || []).length,
+    completedTaskCount: completedCount,
+    boardCount: (data.boards || []).length,
+    data: {
+      tasks: data.tasks || [],
+      boards: data.boards || [],
+      tags: data.tags || [],
+      customTypes: data.customTypes || [],
+      customPriorities: data.customPriorities || [],
+      quadrantConfig: data.quadrantConfig,
+      theme: data.theme,
+      acceptedCollisions: data.acceptedCollisions || [],
+      bgTone: data.bgTone || 'cream',
+    },
+  };
+
+  // FIFO rotation: Newest first, max 4 backups. Oldest automatically removed.
+  const updatedBackups = [newSnapshot, ...existingBackups.filter((b) => b.id !== newSnapshot.id)].slice(0, 4);
+
+  const rawPayload = {
+    uid: uid || email,
+    email: email || '',
+    updatedAt: new Date().toISOString(),
+    backups: updatedBackups,
+    // Top-level fields matching the latest full backup for compatibility
+    ...newSnapshot.data,
+  };
+
+  // Strip undefined properties
+  const payload = JSON.parse(JSON.stringify(rawPayload));
+
+  const writePromises: Promise<any>[] = [];
+
+  if (email) {
+    const emailKey = getEmailDocKey(email);
+    writePromises.push(setDoc(doc(db, 'user_data', emailKey), payload, { merge: true }));
+  }
+
+  if (uid && uid !== email) {
+    writePromises.push(setDoc(doc(db, 'user_data', uid), payload, { merge: true }));
+  }
+
+  try {
+    await Promise.all(writePromises);
+    return updatedBackups;
+  } catch (e: any) {
+    console.error('Error guardando copia de respaldo en la nube:', e);
+    throw e;
+  }
+}
+
+export async function deleteCloudBackupSnapshot(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  backupId: string
+): Promise<CloudBackupSnapshot[]> {
+  let uid = '';
+  let email = '';
+
+  if (typeof userKeyOrProfile === 'object' && userKeyOrProfile !== null) {
+    uid = userKeyOrProfile.uid || '';
+    email = userKeyOrProfile.email || '';
+  } else {
+    uid = String(userKeyOrProfile || '');
+  }
+
+  const currentBackups = await fetchCloudBackupsList(userKeyOrProfile);
+  const updatedBackups = currentBackups.filter((b) => b.id !== backupId);
+
+  const rawPayload = {
+    uid: uid || email,
+    email: email || '',
+    updatedAt: new Date().toISOString(),
+    backups: updatedBackups,
+  };
+
+  const payload = JSON.parse(JSON.stringify(rawPayload));
+  const writePromises: Promise<any>[] = [];
+
+  if (email) {
+    const emailKey = getEmailDocKey(email);
+    writePromises.push(setDoc(doc(db, 'user_data', emailKey), payload, { merge: true }));
+  }
+
+  if (uid && uid !== email) {
+    writePromises.push(setDoc(doc(db, 'user_data', uid), payload, { merge: true }));
+  }
+
+  await Promise.all(writePromises);
+  return updatedBackups;
+}
+
+export async function fetchUserDataFromCloud(
+  userKeyOrProfile: string | { uid?: string; email?: string }
+): Promise<Partial<CloudUserData> | null> {
+  const backups = await fetchCloudBackupsList(userKeyOrProfile);
+  if (backups.length > 0) {
+    // Return the latest backup snapshot data cleanly without any merging!
+    const latest = backups[0];
+    return {
+      uid: typeof userKeyOrProfile === 'object' && userKeyOrProfile ? userKeyOrProfile.uid || '' : String(userKeyOrProfile),
+      updatedAt: latest.createdAt,
+      backups,
+      tasks: latest.data.tasks,
+      boards: latest.data.boards,
+      tags: latest.data.tags,
+      customTypes: latest.data.customTypes,
+      customPriorities: latest.data.customPriorities,
+      quadrantConfig: latest.data.quadrantConfig,
+      theme: latest.data.theme,
+      acceptedCollisions: latest.data.acceptedCollisions,
+      bgTone: latest.data.bgTone,
+    };
+  }
+
+  return null;
+}
+
 
 let isGoogleAuthInitialized = false;
 

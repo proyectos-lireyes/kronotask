@@ -11,7 +11,8 @@
         "tasks": { "type": "array" },
         "tags": { "type": "array" },
         "customTypes": { "type": "array" },
-        "customPriorities": { "type": "array" }
+        "customPriorities": { "type": "array" },
+        "backups": { "type": "array" }
       },
       "required": ["uid", "updatedAt"]
     }

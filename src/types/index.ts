@@ -170,4 +170,25 @@ export const DEFAULT_QUADRANT_CONFIG: QuadrantConfig = {
   q8DaysPostSunday: 30,
 };
 
+export interface CloudBackupSnapshot {
+  id: string;
+  createdAt: string;
+  deviceInfo?: string;
+  taskCount: number;
+  completedTaskCount: number;
+  boardCount: number;
+  data: {
+    tasks: TaskItem[];
+    boards: Board[];
+    tags: CustomTag[];
+    customTypes?: CustomTypeDefinition[];
+    customPriorities?: CustomPriorityDefinition[];
+    quadrantConfig?: QuadrantConfig;
+    theme?: LightThemeConfig;
+    acceptedCollisions?: string[];
+    bgTone?: BackgroundTone;
+  };
+}
+
+
 
