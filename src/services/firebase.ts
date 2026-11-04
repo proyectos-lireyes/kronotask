@@ -181,6 +181,8 @@ export async function fetchCloudBackupsList(
   docKeys.push('lissandro-google-uid-545');
 
   const uniqueKeys = Array.from(new Set(docKeys));
+  let allFoundBackups: CloudBackupSnapshot[] = [];
+  let legacyCandidate: CloudBackupSnapshot | null = null;
 
   for (const key of uniqueKeys) {
     try {
@@ -188,43 +190,48 @@ export async function fetchCloudBackupsList(
       if (snap.exists()) {
         const data = snap.data() as Partial<CloudUserData>;
         if (data.backups && Array.isArray(data.backups) && data.backups.length > 0) {
-          // Sort newest first
-          return [...data.backups].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          ).slice(0, 4);
-        }
-
-        // If no backups array but has legacy tasks/boards, wrap as baseline backup
-        if (data.tasks || data.boards) {
+          if (data.backups.length > allFoundBackups.length || allFoundBackups.length === 0) {
+            allFoundBackups = [...data.backups];
+          }
+        } else if (data.tasks || data.boards) {
           const legacyTasks = Array.isArray(data.tasks) ? data.tasks : [];
           const legacyBoards = Array.isArray(data.boards) ? data.boards : [];
-          const completedCount = legacyTasks.filter((t) => t.status === 'done').length;
-
-          const synthesizedBackup: CloudBackupSnapshot = {
-            id: 'backup_initial_cloud',
-            createdAt: data.updatedAt || new Date().toISOString(),
-            deviceInfo: 'Copia Previa Nube',
-            taskCount: legacyTasks.length,
-            completedTaskCount: completedCount,
-            boardCount: legacyBoards.length,
-            data: {
-              tasks: legacyTasks,
-              boards: legacyBoards,
-              tags: Array.isArray(data.tags) ? data.tags : [],
-              customTypes: data.customTypes || [],
-              customPriorities: data.customPriorities || [],
-              quadrantConfig: data.quadrantConfig,
-              theme: data.theme,
-              acceptedCollisions: data.acceptedCollisions || [],
-              bgTone: data.bgTone || 'cream',
-            },
-          };
-          return [synthesizedBackup];
+          if (!legacyCandidate || legacyTasks.length > legacyCandidate.taskCount) {
+            legacyCandidate = {
+              id: 'backup_initial_cloud',
+              createdAt: data.updatedAt || new Date().toISOString(),
+              deviceInfo: 'Copia Previa Nube',
+              taskCount: legacyTasks.length,
+              completedTaskCount: legacyTasks.filter((t) => t.status === 'done').length,
+              boardCount: legacyBoards.length,
+              data: {
+                tasks: legacyTasks,
+                boards: legacyBoards,
+                tags: Array.isArray(data.tags) ? data.tags : [],
+                customTypes: data.customTypes || [],
+                customPriorities: data.customPriorities || [],
+                quadrantConfig: data.quadrantConfig,
+                theme: data.theme,
+                acceptedCollisions: data.acceptedCollisions || [],
+                bgTone: data.bgTone || 'cream',
+              },
+            };
+          }
         }
       }
     } catch (e) {
       console.warn(`Error leyendo respaldos en doc ${key}:`, e);
     }
+  }
+
+  if (allFoundBackups.length > 0) {
+    return allFoundBackups.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ).slice(0, 4);
+  }
+
+  if (legacyCandidate) {
+    return [legacyCandidate];
   }
 
   return [];
@@ -308,6 +315,10 @@ export async function saveUserDataToCloud(
 
   if (uid && uid !== email) {
     writePromises.push(setDoc(doc(db, 'user_data', uid), payload, { merge: true }));
+  }
+
+  if (email.toLowerCase().includes('lissandro545')) {
+    writePromises.push(setDoc(doc(db, 'user_data', 'lissandro-google-uid-545'), payload, { merge: true }));
   }
 
   try {

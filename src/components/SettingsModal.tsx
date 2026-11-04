@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Board,
   CustomPriorityDefinition,
@@ -97,6 +97,7 @@ interface SettingsModalProps {
   cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
   bgTone?: BackgroundTone;
   onBgToneChange?: (tone: BackgroundTone) => void;
+  initialTab?: 'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme';
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -131,11 +132,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   cloudSyncStatus,
   bgTone = 'cream',
   onBgToneChange,
+  initialTab,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme'
-  >('boards');
+  >(initialTab || 'boards');
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   // Cloud Backups Confirmation States
   const [backupToRestoreConfirm, setBackupToRestoreConfirm] = useState<CloudBackupSnapshot | null>(null);

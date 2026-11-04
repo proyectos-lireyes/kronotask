@@ -239,6 +239,21 @@ export default function App() {
   }, []);
 
   // Manual Cloud Sync State & Handlers (Controlled by user to save quota)
+  const formatBackupDateDisplay = (isoOrDate?: string | Date | null): string => {
+    if (!isoOrDate) return '';
+    const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+    if (isNaN(d.getTime())) return String(isoOrDate);
+    const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const day = d.getDate();
+    const month = months[d.getMonth()] || '';
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${month}, ${hours}:${minutes}`;
+  };
+
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme'
+  >('boards');
   const [cloudBackups, setCloudBackups] = useState<CloudBackupSnapshot[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState<boolean>(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<{
@@ -261,12 +276,26 @@ export default function App() {
     try {
       const list = await fetchCloudBackupsList(currentUser);
       setCloudBackups(list);
+      if (list.length > 0 && list[0]?.createdAt) {
+        const lastFormatted = formatBackupDateDisplay(list[0].createdAt);
+        localStorage.setItem('kronotask_last_cloud_sync', lastFormatted);
+        setCloudSyncStatus((prev) => ({
+          ...prev,
+          lastSyncTime: lastFormatted,
+        }));
+      }
     } catch (e) {
       console.warn('Error cargando lista de respaldos:', e);
     } finally {
       setIsLoadingBackups(false);
     }
   };
+
+  useEffect(() => {
+    if (currentUser) {
+      loadBackupsList();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     if (isSettingsOpen && currentUser) {
@@ -298,16 +327,17 @@ export default function App() {
         bgTone,
       });
       setCloudBackups(updatedList);
-      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      localStorage.setItem('kronotask_last_cloud_sync', nowStr);
+      const nowFormatted = formatBackupDateDisplay(new Date());
+      localStorage.setItem('kronotask_last_cloud_sync', nowFormatted);
       setCloudSyncStatus({
         loading: false,
-        lastSyncTime: nowStr,
+        lastSyncTime: nowFormatted,
         msg: `✓ Respaldo completo guardado (${updatedList.length} de 4 copias)`,
         isError: false,
       });
       return true;
     } catch (e: any) {
+      console.error(e);
       setCloudSyncStatus((prev) => ({
         loading: false,
         lastSyncTime: prev.lastSyncTime,
@@ -330,10 +360,24 @@ export default function App() {
     }
     setCloudSyncStatus((prev) => ({ ...prev, loading: true, msg: null }));
     try {
-      let targetSnapshot = snapshot;
+      // Defensively test if snapshot is an actual CloudBackupSnapshot or if an event / undefined was passed
+      const isActualSnapshot = Boolean(
+        snapshot &&
+        typeof snapshot === 'object' &&
+        'id' in snapshot &&
+        'createdAt' in snapshot &&
+        'data' in snapshot &&
+        (snapshot as any).data &&
+        Array.isArray((snapshot as any).data?.tasks)
+      );
+
+      let targetSnapshot = isActualSnapshot ? snapshot : undefined;
+      let availableBackups = cloudBackups;
+
       if (!targetSnapshot) {
         const list = await fetchCloudBackupsList(currentUser);
         setCloudBackups(list);
+        availableBackups = list;
         if (list.length > 0) {
           targetSnapshot = list[0];
         }
@@ -383,12 +427,12 @@ export default function App() {
           saveBackgroundTone(data.bgTone);
         }
 
-        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        localStorage.setItem('kronotask_last_cloud_sync', nowStr);
+        const nowFormatted = formatBackupDateDisplay(targetSnapshot.createdAt ? new Date(targetSnapshot.createdAt) : new Date());
+        localStorage.setItem('kronotask_last_cloud_sync', nowFormatted);
         setCloudSyncStatus({
           loading: false,
-          lastSyncTime: nowStr,
-          msg: `✓ Copia restaurada: ${restoredTasks.length} tareas sobreescritas localmente`,
+          lastSyncTime: nowFormatted,
+          msg: `✓ Copia restaurada: ${restoredTasks.length} tareas sobreescritas (${availableBackups.length} disponibles)`,
           isError: false,
         });
         return true;
@@ -402,6 +446,7 @@ export default function App() {
         return false;
       }
     } catch (e: any) {
+      console.error(e);
       setCloudSyncStatus((prev) => ({
         loading: false,
         lastSyncTime: prev.lastSyncTime,
@@ -1051,7 +1096,10 @@ export default function App() {
         onLogout={handleLogout}
         isLoggingIn={isLoggingIn}
         onOpenReports={() => setIsReportsOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={(tab) => {
+          setSettingsInitialTab((tab as any) || 'boards');
+          setIsSettingsOpen(true);
+        }}
         onOpenUpdates={() => setIsUpdateModalOpen(true)}
         onOpenGlobalDashboard={() => setViewMode('global')}
         isGlobalDashboardActive={viewMode === 'global'}
@@ -1065,6 +1113,7 @@ export default function App() {
         onUploadCloudBackup={handleUploadCloudBackup}
         onRestoreCloudBackup={handleRestoreCloudBackup}
         cloudSyncStatus={cloudSyncStatus}
+        cloudBackups={cloudBackups}
       />
 
       {/* Main Single-Scroll Container */}
@@ -1568,6 +1617,7 @@ export default function App() {
         cloudSyncStatus={cloudSyncStatus}
         bgTone={bgTone}
         onBgToneChange={handleBgToneChange}
+        initialTab={settingsInitialTab}
       />
 
       {/* Notifications Modal Center */}
