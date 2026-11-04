@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TaskItem } from '../types';
 import { CustomDateTimePicker } from './CustomDateTimePicker';
-import { CheckCircle2, Calendar, Clock, AlertTriangle, ArrowRight, X, Sparkles } from 'lucide-react';
+import { CheckCircle2, Calendar, Clock, AlertTriangle, ArrowRight, X, Sparkles, Edit3 } from 'lucide-react';
 
 interface CompletionDateModalProps {
   isOpen: boolean;
@@ -16,21 +16,29 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
   onClose,
   onConfirm,
 }) => {
-  const [completedAt, setCompletedAt] = useState<string>('');
+  const [closureOption, setClosureOption] = useState<'scheduled' | 'now' | 'custom'>('scheduled');
+  const [customCompletedAt, setCustomCompletedAt] = useState<string>('');
 
   useEffect(() => {
     if (isOpen && task) {
-      // Default to current time when opening
-      setCompletedAt(new Date().toISOString());
+      // Default to scheduled end date or current time if overdue
+      setClosureOption('scheduled');
+      setCustomCompletedAt(new Date().toISOString());
     }
   }, [isOpen, task]);
 
   if (!isOpen || !task) return null;
 
-  const currentNow = new Date();
   const scheduledEnd = new Date(task.endDate);
-  
-  const selectedDate = completedAt ? new Date(completedAt) : new Date();
+
+  const getEffectiveCompletedIso = (): string => {
+    if (closureOption === 'scheduled') return task.endDate;
+    if (closureOption === 'now') return new Date().toISOString();
+    return customCompletedAt || new Date().toISOString();
+  };
+
+  const currentCompletedIso = getEffectiveCompletedIso();
+  const selectedDate = new Date(currentCompletedIso);
   const isValidDate = !isNaN(selectedDate.getTime());
   
   const isLate = isValidDate && selectedDate.getTime() > scheduledEnd.getTime();
@@ -64,18 +72,9 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
     });
   };
 
-  const handleSetNow = () => {
-    setCompletedAt(new Date().toISOString());
-  };
-
-  const handleSetScheduled = () => {
-    setCompletedAt(task.endDate);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalIso = completedAt ? new Date(completedAt).toISOString() : new Date().toISOString();
-    onConfirm(finalIso);
+    onConfirm(getEffectiveCompletedIso());
   };
 
   return (
@@ -92,8 +91,8 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-black">Fecha Real de Cierre</h2>
-              <p className="text-xs text-emerald-100 font-medium">Confirma cuándo se completó esta tarea</p>
+              <h2 className="text-base font-black">Registrar Fecha de Cierre</h2>
+              <p className="text-xs text-emerald-100 font-medium">Define cómo contabilizar la finalización</p>
             </div>
           </div>
           <button
@@ -107,82 +106,154 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
               Tarea a Completar
             </span>
-            <p className="text-sm font-bold text-slate-800 line-clamp-2 mt-0.5">{task.title}</p>
+            <p className="text-sm font-black text-slate-800 line-clamp-2 mt-0.5">{task.title}</p>
           </div>
 
-          {/* Quick Selection Buttons */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">
-              Accesos Rápidos de Fecha
+          {/* 3 Main Closure Options */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-700">
+              ¿Con qué fecha deseas registrar el cierre?
             </label>
-            <div className="grid grid-cols-2 gap-2">
+
+            <div className="grid grid-cols-1 gap-2">
+              {/* Option 1: Scheduled Date */}
               <button
                 type="button"
-                onClick={handleSetNow}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-all cursor-pointer shadow-2xs"
+                onClick={() => setClosureOption('scheduled')}
+                className={`flex items-start gap-3 p-3 text-left rounded-2xl border transition-all cursor-pointer ${
+                  closureOption === 'scheduled'
+                    ? 'border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-500/20 text-emerald-950 shadow-2xs'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                }`}
               >
-                <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Fecha actual (Ahora)</span>
+                <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${
+                  closureOption === 'scheduled' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold">Dejar Fecha Planificada</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                      Puntual
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {formatDate(scheduledEnd)} (Fecha límite original)
+                  </p>
+                </div>
               </button>
+
+              {/* Option 2: Current Moment (Now) */}
               <button
                 type="button"
-                onClick={handleSetScheduled}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-all cursor-pointer shadow-2xs"
+                onClick={() => setClosureOption('now')}
+                className={`flex items-start gap-3 p-3 text-left rounded-2xl border transition-all cursor-pointer ${
+                  closureOption === 'now'
+                    ? 'border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-500/20 text-emerald-950 shadow-2xs'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                }`}
               >
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                <span>Fecha Programada</span>
+                <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${
+                  closureOption === 'now' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold">Fecha y Hora Actual (Ahora)</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                      Tiempo Real
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {formatDate(new Date())}
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 3: Custom Date Picker */}
+              <button
+                type="button"
+                onClick={() => setClosureOption('custom')}
+                className={`flex items-start gap-3 p-3 text-left rounded-2xl border transition-all cursor-pointer ${
+                  closureOption === 'custom'
+                    ? 'border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-500/20 text-emerald-950 shadow-2xs'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${
+                  closureOption === 'custom' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold">Personalizar Fecha de Cierre</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800">
+                      Manual
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Especificar un día u hora diferente del pasado o presente
+                  </p>
+                </div>
               </button>
             </div>
           </div>
 
-          {/* Date Time Picker Component */}
-          <div>
-            <CustomDateTimePicker
-              label="Fecha y Hora Exacta de Entrega / Cierre"
-              value={completedAt}
-              onChange={(newVal) => setCompletedAt(newVal)}
-              required
-            />
-          </div>
+          {/* Custom Date Time Picker if Option 3 selected */}
+          {closureOption === 'custom' && (
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in duration-150">
+              <CustomDateTimePicker
+                label="Seleccionar Fecha y Hora Personalizada de Cierre"
+                value={customCompletedAt}
+                onChange={(newVal) => setCustomCompletedAt(newVal)}
+                required
+              />
+            </div>
+          )}
 
-          {/* Timeliness & Impact Preview */}
-          <div className={`p-4 rounded-2xl border space-y-2 text-xs transition-colors ${
+          {/* Performance & Effectiveness Assessment Card */}
+          <div className={`p-3.5 rounded-2xl border space-y-1.5 text-xs transition-colors ${
             isLate
-              ? 'bg-amber-50/80 border-amber-200 text-amber-900'
-              : 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+              ? 'bg-amber-50/90 border-amber-200 text-amber-900'
+              : 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
           }`}>
-            <div className="flex items-center justify-between text-slate-600">
-              <span className="font-medium">Fecha Línea Programada:</span>
+            <div className="flex items-center justify-between text-slate-600 text-[11px]">
+              <span className="font-medium">Límite Planificado:</span>
               <span className="font-bold text-slate-700">{formatDate(scheduledEnd)}</span>
             </div>
 
-            <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+            <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px]">
               <span className="font-bold flex items-center gap-1">
                 <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
-                Fecha de Cierre Registrada:
+                Fecha Registrada:
               </span>
               <span className="font-black px-2 py-0.5 rounded-md border bg-white/90 shadow-2xs">
                 {formatDate(selectedDate)}
               </span>
             </div>
 
-            <div className="pt-1.5 flex items-center gap-1.5 font-bold">
+            <div className="pt-1 flex items-center gap-1.5 font-bold">
               {isLate ? (
                 <>
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span className="text-amber-700">
-                    Con retraso de <strong>{formatTimeDifference(timeDiffMs)}</strong> respecto al límite programado.
+                  <span className="text-amber-800">
+                    Con retraso de <strong>{formatTimeDifference(timeDiffMs)}</strong> respecto al fin previsto.
                   </span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-emerald-700">
-                    ¡Completada a tiempo! ({timeDiffMs > 0 ? `${formatTimeDifference(timeDiffMs)} antes del límite` : 'Puntual'})
+                  <span className="text-emerald-800">
+                    {timeDiffMs === 0 || closureOption === 'scheduled'
+                      ? '¡Finalizada en la fecha planificada exacta!'
+                      : `¡Cerrada con ${formatTimeDifference(timeDiffMs)} de anticipación!`}
                   </span>
                 </>
               )}
@@ -200,7 +271,7 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] rounded-xl transition-all shadow-md shadow-emerald-200 cursor-pointer flex items-center gap-1.5"
+              className="px-5 py-2.5 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] rounded-xl transition-all shadow-md shadow-emerald-200 cursor-pointer flex items-center gap-1.5"
             >
               <CheckCircle2 className="w-4 h-4" />
               Confirmar Cierre Real
@@ -211,3 +282,4 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
     </div>
   );
 };
+
