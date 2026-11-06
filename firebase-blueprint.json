@@ -21,6 +21,10 @@
     "/user_data/{userId}": {
       "schema": "UserData",
       "description": "User specific application data backup"
+    },
+    "/user_data/{userId}/tasks/{taskId}": {
+      "schema": "TaskItem",
+      "description": "Granular real-time task document"
     }
   }
 }

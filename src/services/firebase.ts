@@ -10,7 +10,18 @@ import {
   User,
   signOut,
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  collection,
+  onSnapshot,
+  query,
+  getDocs,
+  writeBatch,
+} from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -396,6 +407,182 @@ export async function fetchUserDataFromCloud(
   return null;
 }
 
+// ============================================================================
+// GRANULAR REAL-TIME CLOUD SYNC (Low Quota Consumption & Battery Saver)
+// ============================================================================
+
+export function getCanonicalUserKey(userKeyOrProfile: string | { uid?: string; email?: string }): string {
+  if (typeof userKeyOrProfile === 'object' && userKeyOrProfile !== null) {
+    if (userKeyOrProfile.email) {
+      return getEmailDocKey(userKeyOrProfile.email);
+    }
+    return userKeyOrProfile.uid || 'lissandro-google-uid-545';
+  }
+  const s = String(userKeyOrProfile || '');
+  if (s.includes('@')) {
+    return getEmailDocKey(s);
+  }
+  return s || 'lissandro-google-uid-545';
+}
+
+/**
+ * Syncs ONLY the single modified task to Firestore subcollection.
+ * Consumes exactly 1 write and negligible bandwidth (<1 KB).
+ */
+export async function syncSingleTaskToCloud(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  task: TaskItem
+): Promise<void> {
+  try {
+    const userDocKey = getCanonicalUserKey(userKeyOrProfile);
+    if (!userDocKey || !task?.id) return;
+    const taskRef = doc(db, 'user_data', userDocKey, 'tasks', task.id);
+    const cleanPayload = JSON.parse(JSON.stringify(task));
+    await setDoc(taskRef, cleanPayload, { merge: true });
+  } catch (e) {
+    console.warn(`[Realtime Sync] Error syncing single task ${task?.id}:`, e);
+  }
+}
+
+/**
+ * Deletes ONLY the single removed task from Firestore subcollection.
+ * Consumes exactly 1 delete operation.
+ */
+export async function deleteSingleTaskFromCloud(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  taskId: string
+): Promise<void> {
+  try {
+    const userDocKey = getCanonicalUserKey(userKeyOrProfile);
+    if (!userDocKey || !taskId) return;
+    const taskRef = doc(db, 'user_data', userDocKey, 'tasks', taskId);
+    await deleteDoc(taskRef);
+  } catch (e) {
+    console.warn(`[Realtime Sync] Error deleting single task ${taskId}:`, e);
+  }
+}
+
+/**
+ * Seeds local tasks to the cloud subcollection if the subcollection is completely empty.
+ * Runs only once so that existing tasks are available for granular sync.
+ */
+export async function seedInitialCloudTasksIfEmpty(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  localTasks: TaskItem[]
+): Promise<void> {
+  try {
+    if (!localTasks || localTasks.length === 0) return;
+    const userDocKey = getCanonicalUserKey(userKeyOrProfile);
+    const tasksCol = collection(db, 'user_data', userDocKey, 'tasks');
+    const snap = await getDocs(query(tasksCol));
+    if (snap.empty) {
+      const batch = writeBatch(db);
+      localTasks.forEach((t) => {
+        const ref = doc(db, 'user_data', userDocKey, 'tasks', t.id);
+        batch.set(ref, JSON.parse(JSON.stringify(t)));
+      });
+      await batch.commit();
+      console.log(`[Realtime Sync] Seeded ${localTasks.length} initial tasks to cloud.`);
+    }
+  } catch (e) {
+    console.warn('[Realtime Sync] Error seeding initial tasks:', e);
+  }
+}
+
+/**
+ * Subscribes to real-time changes of the user's tasks.
+ * Uses Firestore's native delta updates: only documents that change across the network
+ * are received and billed. Local writes with pending status are ignored to avoid echo loops.
+ */
+export function subscribeToCloudTasks(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  onTasksChange: (changedTasks: TaskItem[], removedTaskIds: string[]) => void,
+  onError?: (error: any) => void
+): () => void {
+  const userDocKey = getCanonicalUserKey(userKeyOrProfile);
+  const tasksCol = collection(db, 'user_data', userDocKey, 'tasks');
+  const q = query(tasksCol);
+
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      // Ignore local optimistic writes to prevent re-render echo
+      if (snapshot.metadata.hasPendingWrites) {
+        return;
+      }
+
+      const updatedOrAddedTasks: TaskItem[] = [];
+      const removedTaskIds: string[] = [];
+
+      snapshot.docChanges().forEach((change) => {
+        const data = change.doc.data() as TaskItem;
+        if (change.type === 'removed') {
+          removedTaskIds.push(change.doc.id);
+        } else {
+          if (data && data.id) {
+            updatedOrAddedTasks.push(data);
+          }
+        }
+      });
+
+      if (updatedOrAddedTasks.length > 0 || removedTaskIds.length > 0) {
+        onTasksChange(updatedOrAddedTasks, removedTaskIds);
+      }
+    },
+    (err) => {
+      console.warn('[Realtime Sync] onSnapshot error:', err);
+      onError?.(err);
+    }
+  );
+
+  return unsubscribe;
+}
+
+/**
+ * Syncs general board and user settings to the meta/config document.
+ */
+export async function syncSettingsToCloud(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  settings: {
+    boards?: Board[];
+    customTypes?: CustomTypeDefinition[];
+    customPriorities?: CustomPriorityDefinition[];
+    tags?: CustomTag[];
+    quadrantConfig?: QuadrantConfig;
+    theme?: LightThemeConfig;
+    bgTone?: BackgroundTone;
+  }
+): Promise<void> {
+  try {
+    const userDocKey = getCanonicalUserKey(userKeyOrProfile);
+    if (!userDocKey) return;
+    const metaRef = doc(db, 'user_data', userDocKey, 'meta', 'config');
+    const cleanPayload = JSON.parse(JSON.stringify(settings));
+    await setDoc(metaRef, cleanPayload, { merge: true });
+  } catch (e) {
+    console.warn('[Realtime Sync] Error syncing settings to cloud:', e);
+  }
+}
+
+/**
+ * Subscribes to settings updates (boards, tags, types, priorities).
+ */
+export function subscribeToCloudSettings(
+  userKeyOrProfile: string | { uid?: string; email?: string },
+  onSettingsChange: (settings: any) => void
+): () => void {
+  const userDocKey = getCanonicalUserKey(userKeyOrProfile);
+  const metaRef = doc(db, 'user_data', userDocKey, 'meta', 'config');
+
+  return onSnapshot(
+    metaRef,
+    (snap) => {
+      if (snap.metadata.hasPendingWrites || !snap.exists()) return;
+      onSettingsChange(snap.data());
+    },
+    (err) => console.warn('[Realtime Sync] settings listener error:', err)
+  );
+}
 
 let isGoogleAuthInitialized = false;
 

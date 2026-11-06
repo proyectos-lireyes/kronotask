@@ -48,6 +48,12 @@ import {
   getStoredUserProfile,
   fetchCloudBackupsList,
   deleteCloudBackupSnapshot,
+  syncSingleTaskToCloud,
+  deleteSingleTaskFromCloud,
+  seedInitialCloudTasksIfEmpty,
+  subscribeToCloudTasks,
+  syncSettingsToCloud,
+  subscribeToCloudSettings,
 } from './services/firebase';
 import { getBiometricRecord, isVaultLocked, setVaultLocked } from './services/biometrics';
 import {
@@ -302,6 +308,118 @@ export default function App() {
       loadBackupsList();
     }
   }, [isSettingsOpen, currentUser]);
+
+  // Granular Real-time Cloud Sync State (Only modified elements, lowest quota & battery saver)
+  const [realtimeSyncEnabled, setRealtimeSyncEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('kronotask_realtime_sync_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'syncing' | 'idle' | 'paused'>('idle');
+
+  const handleToggleRealtimeSync = () => {
+    setRealtimeSyncEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem('kronotask_realtime_sync_enabled', String(next));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!currentUser || !realtimeSyncEnabled) {
+      setRealtimeStatus('paused');
+      return;
+    }
+
+    let unsubscribeTasks: (() => void) | null = null;
+    let unsubscribeSettings: (() => void) | null = null;
+
+    const startListening = () => {
+      setRealtimeStatus('connected');
+      if (!unsubscribeTasks) {
+        unsubscribeTasks = subscribeToCloudTasks(currentUser, (changedTasks, removedIds) => {
+          setTasks((prev) => {
+            let next = [...prev];
+            if (removedIds.length > 0) {
+              next = next.filter((t) => !removedIds.includes(t.id));
+            }
+            changedTasks.forEach((incoming) => {
+              const idx = next.findIndex((t) => t.id === incoming.id);
+              if (idx >= 0) {
+                next[idx] = { ...next[idx], ...incoming };
+              } else {
+                next.unshift(incoming);
+              }
+            });
+            saveTasks(next);
+            return next;
+          });
+        });
+      }
+
+      if (!unsubscribeSettings) {
+        unsubscribeSettings = subscribeToCloudSettings(currentUser, (cloudSettings) => {
+          if (cloudSettings.boards && Array.isArray(cloudSettings.boards) && cloudSettings.boards.length > 0) {
+            setBoards(cloudSettings.boards);
+            saveBoards(cloudSettings.boards);
+          }
+          if (cloudSettings.customTypes && Array.isArray(cloudSettings.customTypes)) {
+            setTypes(cloudSettings.customTypes);
+            saveCustomTypes(cloudSettings.customTypes);
+          }
+          if (cloudSettings.customPriorities && Array.isArray(cloudSettings.customPriorities)) {
+            setPriorities(cloudSettings.customPriorities);
+            saveCustomPriorities(cloudSettings.customPriorities);
+          }
+          if (cloudSettings.tags && Array.isArray(cloudSettings.tags)) {
+            setTags(cloudSettings.tags);
+            saveTags(cloudSettings.tags);
+          }
+          if (cloudSettings.theme) {
+            setTheme(cloudSettings.theme);
+            saveTheme(cloudSettings.theme);
+          }
+          if (cloudSettings.quadrantConfig) {
+            setQuadrantConfig(cloudSettings.quadrantConfig);
+            saveQuadrantConfig(cloudSettings.quadrantConfig);
+          }
+        });
+      }
+    };
+
+    const stopListening = () => {
+      setRealtimeStatus('paused');
+      if (unsubscribeTasks) {
+        unsubscribeTasks();
+        unsubscribeTasks = null;
+      }
+      if (unsubscribeSettings) {
+        unsubscribeSettings();
+        unsubscribeSettings = null;
+      }
+    };
+
+    // Seed existing local tasks to the cloud subcollection if currently empty
+    seedInitialCloudTasksIfEmpty(currentUser, tasksRef.current);
+
+    // ANDROID / MOBILE BATTERY SAVER:
+    // When screen turns off or app is minimized to background, disconnect listener.
+    // When app returns to foreground, reconnect and catch up immediately.
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopListening();
+      } else {
+        startListening();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    startListening();
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      stopListening();
+    };
+  }, [currentUser, realtimeSyncEnabled]);
 
   const handleUploadCloudBackup = async (): Promise<boolean> => {
     if (!currentUser) {
@@ -697,6 +815,13 @@ export default function App() {
     }
 
     updateTasks(updatedTasks);
+
+    // Fine-grained Realtime Cloud Sync: sync only the modified task & any recurring cycle
+    if (currentUser && realtimeSyncEnabled) {
+      const changed = updatedTasks.find((t) => t.id === taskId);
+      if (changed) syncSingleTaskToCloud(currentUser, changed);
+      if (extraTask) syncSingleTaskToCloud(currentUser, extraTask);
+    }
   };
 
   const handleSaveTask = (taskToSave: TaskItem, options?: { editScope?: 'single' | 'series' }) => {
@@ -724,11 +849,17 @@ export default function App() {
           );
           const updated = [...completedFromSeries, ...pendingGenerated, ...otherTasks];
           updateTasks(updated);
+          if (currentUser && realtimeSyncEnabled) {
+            pendingGenerated.forEach((gen) => syncSingleTaskToCloud(currentUser, gen));
+          }
           return;
         } else {
           // Nueva tarea periódica: se crean todas las tareas hasta la fecha límite
           const updated = [...generatedSeries, ...tasks];
           updateTasks(updated);
+          if (currentUser && realtimeSyncEnabled) {
+            generatedSeries.forEach((gen) => syncSingleTaskToCloud(currentUser, gen));
+          }
           return;
         }
       }
@@ -742,6 +873,11 @@ export default function App() {
       updated = [taskToSave, ...tasks];
     }
     updateTasks(updated);
+
+    // Fine-grained Realtime Cloud Sync: sync only the single saved task
+    if (currentUser && realtimeSyncEnabled) {
+      syncSingleTaskToCloud(currentUser, taskToSave);
+    }
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -760,11 +896,17 @@ export default function App() {
         onConfirm: () => {
           const updated = tasks.filter((t) => t.recurrenceSeriesId !== seriesId);
           updateTasks(updated);
+          if (currentUser && realtimeSyncEnabled) {
+            seriesTasks.forEach((st) => deleteSingleTaskFromCloud(currentUser, st.id));
+          }
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         },
         onCancel: () => {
           const updated = tasks.filter((t) => t.id !== taskId);
           updateTasks(updated);
+          if (currentUser && realtimeSyncEnabled) {
+            deleteSingleTaskFromCloud(currentUser, taskId);
+          }
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         },
       });
@@ -781,6 +923,9 @@ export default function App() {
       onConfirm: () => {
         const updated = tasks.filter((t) => t.id !== taskId);
         updateTasks(updated);
+        if (currentUser && realtimeSyncEnabled) {
+          deleteSingleTaskFromCloud(currentUser, taskId);
+        }
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       },
     });
@@ -1000,18 +1145,23 @@ export default function App() {
   }, [tasks, boards, acceptedCollisions]);
 
   const handleResolveCollision = (taskIdToMove: string, newStartIso: string, newEndIso: string) => {
+    let movedTask: TaskItem | null = null;
     const updated = tasks.map((t) => {
       if (t.id === taskIdToMove) {
-        return {
+        movedTask = {
           ...t,
           startDate: newStartIso,
           endDate: newEndIso,
           updatedAt: new Date().toISOString(),
         };
+        return movedTask;
       }
       return t;
     });
     updateTasks(updated);
+    if (currentUser && realtimeSyncEnabled && movedTask) {
+      syncSingleTaskToCloud(currentUser, movedTask);
+    }
   };
 
   const handleToggleAcceptCollision = (pairKey: string) => {
@@ -1114,6 +1264,9 @@ export default function App() {
         onRestoreCloudBackup={handleRestoreCloudBackup}
         cloudSyncStatus={cloudSyncStatus}
         cloudBackups={cloudBackups}
+        realtimeSyncEnabled={realtimeSyncEnabled}
+        onToggleRealtimeSync={handleToggleRealtimeSync}
+        realtimeStatus={realtimeStatus}
       />
 
       {/* Main Single-Scroll Container */}

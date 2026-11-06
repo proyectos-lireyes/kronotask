@@ -14,6 +14,8 @@ import {
   CloudUpload,
   CloudDownload,
   History,
+  Zap,
+  Radio,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -37,6 +39,9 @@ interface HeaderProps {
   onRestoreCloudBackup?: (snapshot?: CloudBackupSnapshot) => Promise<boolean>;
   cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
   cloudBackups?: CloudBackupSnapshot[];
+  realtimeSyncEnabled?: boolean;
+  onToggleRealtimeSync?: () => void;
+  realtimeStatus?: 'connected' | 'syncing' | 'idle' | 'paused';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,6 +65,9 @@ export const Header: React.FC<HeaderProps> = ({
   onRestoreCloudBackup,
   cloudSyncStatus,
   cloudBackups = [],
+  realtimeSyncEnabled = true,
+  onToggleRealtimeSync,
+  realtimeStatus = 'connected',
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -206,6 +214,53 @@ export const Header: React.FC<HeaderProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* Real-Time Granular Sync (Low Quota & Battery Saver) */}
+                {currentUser && (
+                  <div className="p-2.5 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-indigo-200/80 rounded-2xl mb-2 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
+                        <span className="text-[11px] font-bold text-slate-800">Sincronización en Vivo</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {realtimeSyncEnabled ? (
+                          <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                            realtimeStatus === 'connected'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-amber-100 text-amber-800 border border-amber-300'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              realtimeStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                            }`} />
+                            {realtimeStatus === 'connected' ? 'En Vivo' : 'Pausada'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            Pausada
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={onToggleRealtimeSync}
+                          className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                            realtimeSyncEnabled ? 'bg-blue-600' : 'bg-slate-300'
+                          }`}
+                          title={realtimeSyncEnabled ? 'Desactivar sincronización en vivo' : 'Activar sincronización en vivo'}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                              realtimeSyncEnabled ? 'translate-x-3.5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-tight">
+                      Sincroniza solo el elemento que modificas (&lt;1 KB). Se pausa en segundo plano para ahorrar batería en Android.
+                    </p>
+                  </div>
+                )}
 
                 {/* Manual Cloud Sync Controls */}
                 {currentUser && (
