@@ -311,6 +311,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     let waitingSince = task?.waitingSince;
     let frictionPoints = task?.frictionPoints || 0;
     let finalEndMs = new Date(endDate).getTime();
+    const startMs = new Date(startDate).getTime();
+
+    // Si la fecha fin queda antes o igual a la fecha de inicio, desplazar automáticamente 12 horas después
+    if (!isNaN(startMs) && (isNaN(finalEndMs) || finalEndMs <= startMs)) {
+      finalEndMs = startMs + 12 * 60 * 60 * 1000;
+    }
 
     if (status === 'waiting') {
       if (!waitingSince) {
@@ -961,6 +967,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             else if (durationUnit === 'months') d.setMonth(d.getMonth() + durationValue);
                             else if (durationUnit === 'years') d.setFullYear(d.getFullYear() + durationValue);
                             setEndDate(toDateTimeLocal(d));
+                          } else {
+                            // Regla: si la fecha fin queda antes o igual a la nueva fecha inicio,
+                            // correr la fecha fin 12 horas después de la nueva fecha inicio establecida.
+                            const newStartMs = new Date(newVal).getTime();
+                            const currentEndMs = new Date(endDate).getTime();
+                            if (!isNaN(newStartMs) && (isNaN(currentEndMs) || currentEndMs <= newStartMs)) {
+                              const pushedEnd = new Date(newStartMs + 12 * 60 * 60 * 1000);
+                              setEndDate(toDateTimeLocal(pushedEnd));
+                            }
                           }
                         }}
                       />
@@ -973,7 +988,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                           label="Fin (Fecha Límite)"
                           required
                           value={endDate}
-                          onChange={(newVal) => setEndDate(newVal)}
+                          minDate={startDate}
+                          onChange={(newVal) => {
+                            const chosenEndMs = new Date(newVal).getTime();
+                            const currentStartMs = new Date(startDate).getTime();
+                            if (!isNaN(chosenEndMs) && !isNaN(currentStartMs) && chosenEndMs <= currentStartMs) {
+                              const pushedEnd = new Date(currentStartMs + 12 * 60 * 60 * 1000);
+                              setEndDate(toDateTimeLocal(pushedEnd));
+                            } else {
+                              setEndDate(newVal);
+                            }
+                          }}
                         />
                       </div>
                     ) : (
