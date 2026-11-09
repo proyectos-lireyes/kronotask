@@ -173,13 +173,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
               {/* Tasks list in this day */}
               <div className="space-y-1 flex-1 overflow-hidden">
-                {dayTasks.slice(0, 3).map((t) => {
+                {dayTasks.slice(0, 3).map((t, idx) => {
                   const isDone = t.status === 'done';
                   const timeCalc = calculateTimeLevel(t.startDate, t.endDate, Date.now(), isDone);
 
                   return (
                     <div
-                      key={t.id}
+                      key={`${t.id}-${idx}`}
                       className={`px-1.5 py-0.5 rounded text-[10px] font-semibold truncate border flex items-center gap-1 ${timeCalc.badgeBg}`}
                     >
                       <span className="truncate">{t.title}</span>
@@ -246,14 +246,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   </p>
                 </div>
               ) : (
-                selectedDateTasks.map((task) => {
+                selectedDateTasks.map((task, idx) => {
                   const isDone = task.status === 'done';
                   const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
                   const taskBoard = allBoards?.find((b) => b.id === task.boardId);
 
                   return (
                     <div
-                      key={task.id}
+                      key={`${task.id}-${idx}`}
                       onClick={() => {
                         onSelectTask(task);
                         setSelectedDayDate(null);

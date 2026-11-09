@@ -20,6 +20,7 @@ import {
   Flame,
   AlertTriangle,
   Zap,
+  XCircle,
 } from 'lucide-react';
 
 interface TaskListViewProps {
@@ -78,7 +79,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
     return tasks.filter((task) => {
       const isDone = task.status === 'done';
       const endMs = new Date(task.endDate).getTime();
-      const timeCalc = calculateTimeLevel(task.startDate, task.endDate, nowMs, isDone);
+      const timeCalc = calculateTimeLevel(task.startDate, task.endDate, nowMs, isDone, task.completionOutcome);
 
       // 1. Delivery range filter
       if (deliveryFilter === 'overdue') {
@@ -321,18 +322,21 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                sortedTasks.map((task) => {
+                sortedTasks.map((task, idx) => {
                   const isDone = task.status === 'done';
-                  const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
+                  const isMissed = isDone && task.completionOutcome === 'missed';
+                  const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone, task.completionOutcome);
                   const mismatch = detectTaskStatusMismatch(task, Date.now());
                   const taskBoard = allBoards?.find((b) => b.id === task.boardId);
 
                   return (
                     <tr
-                      key={task.id}
+                      key={`${task.id}-${idx}`}
                       onClick={() => onSelectTask(task)}
                       className={`cursor-pointer transition-colors ${
-                        bgTone === 'cream'
+                        isMissed
+                          ? 'bg-rose-50/40 hover:bg-rose-50/70'
+                          : bgTone === 'cream'
                           ? 'hover:bg-[#f3efe4]'
                           : bgTone === 'gray'
                           ? 'hover:bg-[#ebeef3]'
@@ -344,10 +348,15 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                           type="button"
                           onClick={() => onStatusChange(task.id, isDone ? 'in_progress' : 'done')}
                           className={`p-1 rounded-md cursor-pointer ${
-                            isDone ? 'text-emerald-600' : 'text-slate-300 hover:text-emerald-500'
+                            isMissed
+                              ? 'text-rose-600 hover:text-rose-700'
+                              : isDone
+                              ? 'text-emerald-600'
+                              : 'text-slate-300 hover:text-emerald-500'
                           }`}
+                          title={isDone ? (isMissed ? 'No Cumplida (Vencida). Clic para reabrir.' : 'Completada. Clic para reabrir.') : 'Marcar como completada'}
                         >
-                          <CheckCircle2 className="w-4 h-4" />
+                          {isMissed ? <XCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                         </button>
                       </td>
 

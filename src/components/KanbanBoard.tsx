@@ -254,11 +254,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     </button>
                   </div>
                 ) : (
-                  colTasks.map((task) => {
+                  colTasks.map((task, idx) => {
                     const taskBoard = allBoards?.find((b) => b.id === task.boardId);
                     return (
                       <TaskCard
-                        key={task.id}
+                        key={`${task.id}-${idx}`}
                         task={task}
                         allTags={allTags}
                         board={taskBoard}

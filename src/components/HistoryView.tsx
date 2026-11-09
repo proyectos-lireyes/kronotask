@@ -11,6 +11,7 @@ import {
   Repeat,
   Info,
   Filter,
+  XCircle,
 } from 'lucide-react';
 
 interface HistoryViewProps {
@@ -47,10 +48,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   });
 
   const onTimeCount = completedTasks.filter((t) => {
+    if (t.completionOutcome === 'missed') return false;
     const end = new Date(t.endDate).getTime();
     const completed = t.completedAt ? new Date(t.completedAt).getTime() : Date.now();
     return completed <= end;
   }).length;
+
+  const missedCount = completedTasks.filter((t) => t.completionOutcome === 'missed').length;
 
   const onTimePercent =
     completedTasks.length > 0 ? Math.round((onTimeCount / completedTasks.length) * 100) : 100;
@@ -69,18 +73,24 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <div>
               <h2 className="text-base font-bold text-slate-900">Historial & Evaluación de Cumplimiento</h2>
               <p className="text-xs text-slate-500">
-                Registro con evidencia de entrega (A tiempo vs. Con retraso) para tareas periódicas y únicas
+                Registro con evidencia de entrega (A tiempo vs. Con retraso vs. No cumplidas)
               </p>
             </div>
           </div>
         </div>
 
         {/* Quick KPI pills */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center">
             <span className="text-xs font-black text-slate-800">{completedTasks.length}</span>
             <span className="text-[10px] text-slate-500 block">Total</span>
           </div>
+          {missedCount > 0 && (
+            <div className="px-3 py-1.5 bg-rose-50 border border-rose-200 rounded-xl text-center">
+              <span className="text-xs font-black text-rose-700">{missedCount}</span>
+              <span className="text-[10px] text-rose-800 block">No Cumplidas</span>
+            </div>
+          )}
           <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
             <span className="text-xs font-black text-indigo-700">{recurringCount}</span>
             <span className="text-[10px] text-indigo-800 block">Periódicas</span>
@@ -166,28 +176,35 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               : 'No se encontraron tareas coincidentes en el historial.'}
           </div>
         ) : (
-          filtered.map((task) => {
+          filtered.map((task, idx) => {
             const end = new Date(task.endDate).getTime();
             const completed = task.completedAt ? new Date(task.completedAt).getTime() : Date.now();
-            const wasOnTime = completed <= end;
+            const isMissed = task.completionOutcome === 'missed';
+            const wasOnTime = !isMissed && completed <= end;
             const diffHours = Math.abs(completed - end) / (1000 * 60 * 60);
 
             const taskBoard = allBoards?.find((b) => b.id === task.boardId);
 
             return (
               <div
-                key={task.id}
+                key={`${task.id}-${idx}`}
                 onClick={() => onSelectTask(task)}
-                className="py-3 px-2 hover:bg-slate-50/80 rounded-xl cursor-pointer flex items-center justify-between gap-3 transition-colors group"
+                className={`py-3 px-2 rounded-xl cursor-pointer flex items-center justify-between gap-3 transition-colors group ${
+                  isMissed ? 'hover:bg-rose-50/70 bg-rose-50/30' : 'hover:bg-slate-50/80'
+                }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg shrink-0">
-                    <CheckCircle2 className="w-4 h-4" />
+                  <div className={`p-1.5 rounded-lg shrink-0 ${
+                    isMissed ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {isMissed ? <XCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                   </div>
 
                   <div className="truncate space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-slate-800 group-hover:text-blue-600 transition-colors truncate">
+                      <span className={`text-sm font-semibold truncate transition-colors ${
+                        isMissed ? 'text-rose-900 line-through' : 'text-slate-800 group-hover:text-blue-600'
+                      }`}>
                         {task.title}
                       </span>
 
@@ -212,12 +229,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       {/* Result Badge */}
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          wasOnTime
+                          isMissed
+                            ? 'bg-stone-900 text-rose-300 border border-stone-800'
+                            : wasOnTime
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : 'bg-rose-50 text-rose-700 border border-rose-200'
                         }`}
                       >
-                        {wasOnTime ? '✅ A tiempo' : `🚨 Con retraso (${diffHours > 24 ? `${Math.round(diffHours / 24)}d tardíos` : `${Math.round(diffHours)}h tardías`})`}
+                        {isMissed
+                          ? '❌ No Cumplida (Vencida sin ejecutar)'
+                          : wasOnTime
+                          ? '✅ A tiempo'
+                          : `🚨 Con retraso (${diffHours > 24 ? `${Math.round(diffHours / 24)}d tardíos` : `${Math.round(diffHours)}h tardías`})`}
                       </span>
                     </div>
 

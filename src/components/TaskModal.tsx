@@ -103,6 +103,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
   const [recurrenceInterval, setRecurrenceInterval] = useState(15);
   const [recurrenceUnit, setRecurrenceUnit] = useState<RecurrenceUnit>('days');
+  const [recurrenceWeekDays, setRecurrenceWeekDays] = useState<number[]>([]);
   const [recurrenceEndCondition, setRecurrenceEndCondition] = useState<'until_date' | 'count' | 'never'>('until_date');
   const [recurrenceUntilDate, setRecurrenceUntilDate] = useState<string>('');
   const [recurrenceCount, setRecurrenceCount] = useState<number>(6);
@@ -179,6 +180,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setRecurrenceEnabled(task.recurrence?.enabled || false);
       setRecurrenceInterval(task.recurrence?.interval || 15);
       setRecurrenceUnit(task.recurrence?.unit || 'days');
+      setRecurrenceWeekDays(task.recurrence?.weekDays || []);
       setRecurrenceEndCondition(task.recurrence?.endCondition || 'until_date');
       if (task.recurrence?.repeatUntilDate) {
         setRecurrenceUntilDate(toDateTimeLocal(new Date(task.recurrence.repeatUntilDate)));
@@ -213,6 +215,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setRecurrenceEnabled(false);
       setRecurrenceInterval(15);
       setRecurrenceUnit('days');
+      setRecurrenceWeekDays([]);
       setRecurrenceEndCondition('until_date');
       const inThreeMonths = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
       setRecurrenceUntilDate(toDateTimeLocal(inThreeMonths));
@@ -265,6 +268,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           enabled: true,
           interval: Math.max(1, recurrenceInterval),
           unit: recurrenceUnit,
+          weekDays: recurrenceWeekDays.length > 0 ? recurrenceWeekDays : undefined,
           endCondition: recurrenceEndCondition,
           repeatUntilDate: untilIso,
           repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : undefined,
@@ -274,7 +278,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } catch (e) {
       return [];
     }
-  }, [recurrenceEnabled, startDate, endDate, recurrenceInterval, recurrenceUnit, recurrenceEndCondition, recurrenceUntilDate, recurrenceCount]);
+  }, [recurrenceEnabled, startDate, endDate, recurrenceInterval, recurrenceUnit, recurrenceWeekDays, recurrenceEndCondition, recurrenceUntilDate, recurrenceCount]);
 
   const selectedBoardObj = allBoards.find((b) => b.id === boardId) || allBoards[0];
   const selectedPriorityObj = allPriorities.find((p) => p.id === priority) || allPriorities[0];
@@ -351,6 +355,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             enabled: true,
             interval: Math.max(1, recurrenceInterval),
             unit: recurrenceUnit,
+            weekDays: recurrenceWeekDays.length > 0 ? recurrenceWeekDays : undefined,
             endCondition: recurrenceEndCondition,
             repeatUntilDate: recurrenceEndCondition === 'until_date' && recurrenceUntilDate ? new Date(recurrenceUntilDate).toISOString() : undefined,
             repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : undefined,
@@ -1227,7 +1232,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             {recurrenceUnit === 'hours'
                               ? 'Horas'
                               : recurrenceUnit === 'days'
-                              ? 'Días'
+                              ? 'Días (Calendario)'
+                              : recurrenceUnit === 'workdays'
+                              ? 'Días Hábiles (Lun-Vie)'
                               : recurrenceUnit === 'weeks'
                               ? 'Semanas'
                               : recurrenceUnit === 'months'
@@ -1237,11 +1244,62 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                           <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                         </button>
                       </div>
+
+                      {/* Selector de días de la semana específicos */}
+                      <div className="col-span-2 space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-semibold text-slate-700">
+                            Días específicos de la semana:
+                          </label>
+                          {recurrenceWeekDays.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setRecurrenceWeekDays([])}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer"
+                            >
+                              Limpiar selección
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {[
+                            { id: 1, label: 'Lun' },
+                            { id: 2, label: 'Mar' },
+                            { id: 3, label: 'Mié' },
+                            { id: 4, label: 'Jue' },
+                            { id: 5, label: 'Vie' },
+                            { id: 6, label: 'Sáb' },
+                            { id: 0, label: 'Dom' },
+                          ].map((d) => {
+                            const isSelected = recurrenceWeekDays.includes(d.id);
+                            return (
+                              <button
+                                key={d.id}
+                                type="button"
+                                onClick={() => {
+                                  setRecurrenceWeekDays((prev) =>
+                                    prev.includes(d.id) ? prev.filter((w) => w !== d.id) : [...prev, d.id]
+                                  );
+                                }}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50'
+                                }`}
+                              >
+                                {d.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       <div className="col-span-2 text-xs text-indigo-700 font-medium bg-indigo-50 p-2 rounded-lg border border-indigo-200">
                         {formatRecurrenceLabel({
                           enabled: true,
                           interval: recurrenceInterval,
                           unit: recurrenceUnit,
+                          weekDays: recurrenceWeekDays.length > 0 ? recurrenceWeekDays : undefined,
                         })}
                       </div>
 
@@ -1249,14 +1307,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       <div className="col-span-2 flex flex-wrap items-center gap-1 pt-1">
                         <span className="text-[10px] text-slate-500 font-bold mr-0.5">Atajos:</span>
                         {[
-                          { label: 'Cada 15 días', interval: 15, unit: 'days' as const },
-                          { label: 'Diario (1 día)', interval: 1, unit: 'days' as const },
-                          { label: 'Cada 3 días', interval: 3, unit: 'days' as const },
-                          { label: 'Semanal (7 días)', interval: 1, unit: 'weeks' as const },
-                          { label: 'Quincenal (2 sem)', interval: 2, unit: 'weeks' as const },
-                          { label: 'Mensual (1 mes)', interval: 1, unit: 'months' as const },
-                          { label: 'Cada 6 meses', interval: 6, unit: 'months' as const },
-                          { label: 'Anual (1 año)', interval: 1, unit: 'years' as const },
+                          { label: 'Cada 15 días', interval: 15, unit: 'days' as const, weekDays: [] },
+                          { label: 'Diario (1 día)', interval: 1, unit: 'days' as const, weekDays: [] },
+                          { label: 'Cada 3 días hábiles', interval: 3, unit: 'workdays' as const, weekDays: [] },
+                          { label: 'Cada Lunes', interval: 1, unit: 'weeks' as const, weekDays: [1] },
+                          { label: 'Mar, Jue y Vie', interval: 1, unit: 'weeks' as const, weekDays: [2, 4, 5] },
+                          { label: 'Semanal (7 días)', interval: 1, unit: 'weeks' as const, weekDays: [] },
+                          { label: 'Quincenal (2 sem)', interval: 2, unit: 'weeks' as const, weekDays: [] },
+                          { label: 'Mensual (1 mes)', interval: 1, unit: 'months' as const, weekDays: [] },
+                          { label: 'Anual (1 año)', interval: 1, unit: 'years' as const, weekDays: [] },
                         ].map((p) => (
                           <button
                             key={p.label}
@@ -1264,9 +1323,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             onClick={() => {
                               setRecurrenceInterval(p.interval);
                               setRecurrenceUnit(p.unit);
+                              setRecurrenceWeekDays(p.weekDays);
                             }}
                             className={`px-2 py-0.5 text-[10px] font-bold rounded-md border transition-all cursor-pointer ${
-                              recurrenceInterval === p.interval && recurrenceUnit === p.unit
+                              recurrenceInterval === p.interval && recurrenceUnit === p.unit && JSON.stringify(recurrenceWeekDays) === JSON.stringify(p.weekDays)
                                 ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
                                 : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'
                             }`}
@@ -1911,7 +1971,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         icon={Repeat}
         options={[
           { id: 'hours', label: 'Horas' },
-          { id: 'days', label: 'Días' },
+          { id: 'days', label: 'Días (Calendario)' },
+          { id: 'workdays', label: 'Días Hábiles (Lun a Vie)' },
           { id: 'weeks', label: 'Semanas' },
           { id: 'months', label: 'Meses' },
           { id: 'years', label: 'Años' },

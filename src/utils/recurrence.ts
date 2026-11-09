@@ -1,7 +1,36 @@
 import { RecurrenceRule, RecurrenceUnit, TaskItem } from '../types';
 
-export function addRecurrenceInterval(d: Date, interval: number, unit: RecurrenceUnit): Date {
+export function addWorkdays(d: Date, workdaysToAdd: number): Date {
   const result = new Date(d);
+  let added = 0;
+  while (added < workdaysToAdd) {
+    result.setDate(result.getDate() + 1);
+    const dayOfWeek = result.getDay();
+    // 0 = Sunday, 6 = Saturday
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      added++;
+    }
+  }
+  return result;
+}
+
+export function addRecurrenceInterval(d: Date, interval: number, unit: RecurrenceUnit, weekDays?: number[]): Date {
+  const result = new Date(d);
+
+  // If specific weekdays are specified (e.g. [1, 2, 4, 5] for Mon, Tue, Thu, Fri)
+  if (weekDays && weekDays.length > 0) {
+    let checkDate = new Date(d);
+    checkDate.setDate(checkDate.getDate() + 1);
+    let attempts = 0;
+    while (attempts < 14) {
+      if (weekDays.includes(checkDate.getDay())) {
+        return checkDate;
+      }
+      checkDate.setDate(checkDate.getDate() + 1);
+      attempts++;
+    }
+  }
+
   switch (unit) {
     case 'hours':
       result.setHours(result.getHours() + interval);
@@ -9,6 +38,8 @@ export function addRecurrenceInterval(d: Date, interval: number, unit: Recurrenc
     case 'days':
       result.setDate(result.getDate() + interval);
       break;
+    case 'workdays':
+      return addWorkdays(d, interval);
     case 'weeks':
       result.setDate(result.getDate() + interval * 7);
       break;
@@ -37,7 +68,7 @@ export function calculateNextOccurrence(
   const end = new Date(currentEnd);
   const durationMs = Math.max(1000 * 60 * 30, end.getTime() - start.getTime());
 
-  const nextStart = addRecurrenceInterval(start, recurrence.interval, recurrence.unit);
+  const nextStart = addRecurrenceInterval(start, recurrence.interval, recurrence.unit, recurrence.weekDays);
   const nextEnd = new Date(nextStart.getTime() + durationMs);
 
   return {
@@ -111,7 +142,7 @@ export function calculateAllOccurrences(
     : maxCap;
 
   while (currentIndex < maxCount) {
-    const nextStart = addRecurrenceInterval(currentStart, interval, unit);
+    const nextStart = addRecurrenceInterval(currentStart, interval, unit, recurrence.weekDays);
     const nextEnd = new Date(nextStart.getTime() + durationMs);
 
     if (untilTimeMs !== null && nextStart.getTime() > untilTimeMs) {
@@ -145,27 +176,42 @@ export function generateRecurringTaskSeries(
   const seriesId = options?.seriesId || baseTask.recurrenceSeriesId || `series-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const occurrences = calculateAllOccurrences(baseTask.startDate, baseTask.endDate, baseTask.recurrence);
   const total = occurrences.length;
+  const baseTaskIndex = baseTask.recurrenceIndex || 1;
+
+  const usedIds = new Set<string>();
 
   return occurrences.map((occ, idx) => {
-    const isFirst = idx === 0;
-    const taskId = isFirst ? baseTask.id : `task-${seriesId}-${occ.index}`;
+    const cycleNum = occ.index;
+    const isBaseOccurrence = cycleNum === baseTaskIndex || (idx === 0 && !baseTask.recurrenceIndex);
+
+    let taskId: string;
+    if (isBaseOccurrence) {
+      taskId = baseTask.id;
+    } else {
+      taskId = `task-${seriesId}-${cycleNum}`;
+      if (taskId === baseTask.id || usedIds.has(taskId)) {
+        taskId = `task-${seriesId}-${cycleNum}-${idx}`;
+      }
+    }
+
+    usedIds.add(taskId);
 
     return {
       ...baseTask,
       id: taskId,
       title: baseTask.title,
-      status: isFirst ? baseTask.status : 'todo',
+      status: isBaseOccurrence ? baseTask.status : 'todo',
       startDate: occ.startDate,
       endDate: occ.endDate,
-      completedAt: isFirst ? baseTask.completedAt : null,
+      completedAt: isBaseOccurrence ? baseTask.completedAt : null,
       recurrence: {
         ...baseTask.recurrence!,
         repeatCount: total,
       },
       recurrenceSeriesId: seriesId,
-      recurrenceIndex: occ.index,
+      recurrenceIndex: cycleNum,
       recurrenceTotal: total,
-      createdAt: isFirst ? baseTask.createdAt : new Date().toISOString(),
+      createdAt: isBaseOccurrence ? baseTask.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
   });
@@ -173,10 +219,35 @@ export function generateRecurringTaskSeries(
 
 export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
   if (!rule || !rule.enabled) return 'Sin repetición';
-  const { interval, unit, endCondition, repeatUntilDate, repeatCount } = rule;
+  const { interval, unit, weekDays, endCondition, repeatUntilDate, repeatCount } = rule;
+
+  const dayNamesShort: Record<number, string> = {
+    1: 'Lun',
+    2: 'Mar',
+    3: 'Mié',
+    4: 'Jue',
+    5: 'Vie',
+    6: 'Sáb',
+    0: 'Dom',
+  };
+
+  if (weekDays && weekDays.length > 0) {
+    const daysStr = weekDays.map((d) => dayNamesShort[d]).join(', ');
+    let baseText = `Días específicos: ${daysStr}`;
+    if (endCondition === 'until_date' && repeatUntilDate) {
+      const d = new Date(repeatUntilDate);
+      const dateStr = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+      baseText += ` · Hasta ${dateStr}`;
+    } else if (endCondition === 'count' && repeatCount) {
+      baseText += ` · ${repeatCount} repeticiones`;
+    }
+    return baseText;
+  }
+
   const unitMap: Record<RecurrenceUnit, { singular: string; plural: string }> = {
     hours: { singular: 'hora', plural: 'horas' },
     days: { singular: 'día', plural: 'días' },
+    workdays: { singular: 'día hábil', plural: 'días hábiles' },
     weeks: { singular: 'semana', plural: 'semanas' },
     months: { singular: 'mes', plural: 'meses' },
     years: { singular: 'año', plural: 'años' },

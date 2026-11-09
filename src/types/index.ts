@@ -4,12 +4,13 @@ export type TimeColorLevel = 'green' | 'blue' | 'yellow' | 'orange' | 'red' | 'b
 
 export type BackgroundTone = 'cream' | 'gray' | 'white';
 
-export type RecurrenceUnit = 'hours' | 'days' | 'weeks' | 'months' | 'years';
+export type RecurrenceUnit = 'hours' | 'days' | 'workdays' | 'weeks' | 'months' | 'years';
 
 export interface RecurrenceRule {
   enabled: boolean;
   interval: number;
   unit: RecurrenceUnit;
+  weekDays?: number[]; // [1, 2, 4, 5] (1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday, 0=Sunday)
   nextTriggerDate?: string;
   endCondition?: 'never' | 'until_date' | 'count';
   repeatUntilDate?: string;
@@ -64,6 +65,7 @@ export interface Board {
   color: string;
   icon?: string;
   createdAt: string;
+  includeInMaster?: boolean; // Default true, whether tasks from this board are included in Master board
 }
 
 export interface TaskReminder {
@@ -84,6 +86,7 @@ export interface TaskItem {
   startDate: string; // ISO string
   endDate: string; // ISO string (deadline)
   completedAt?: string | null;
+  completionOutcome?: 'completed' | 'missed' | null;
   priority: string; // matches CustomPriorityDefinition.id or name
   type: string; // matches CustomTypeDefinition.id or name
   tags: string[];
@@ -170,6 +173,20 @@ export const DEFAULT_QUADRANT_CONFIG: QuadrantConfig = {
   q8DaysPostSunday: 30,
 };
 
+export interface PlanningPeriodConfig {
+  enabled: boolean;
+  name?: string;
+  startDate: string; // ISO string
+  endDate: string; // ISO string
+}
+
+export const DEFAULT_PLANNING_PERIOD: PlanningPeriodConfig = {
+  enabled: false,
+  name: 'Plan Actual',
+  startDate: '',
+  endDate: '',
+};
+
 export interface CloudBackupSnapshot {
   id: string;
   createdAt: string;
@@ -187,8 +204,10 @@ export interface CloudBackupSnapshot {
     theme?: LightThemeConfig;
     acceptedCollisions?: string[];
     bgTone?: BackgroundTone;
+    planningPeriod?: PlanningPeriodConfig;
   };
 }
+
 
 
 

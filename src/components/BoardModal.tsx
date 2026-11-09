@@ -5,7 +5,7 @@ import { FolderKanban, X, Check, Palette } from 'lucide-react';
 interface BoardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string, description: string, color: string) => void;
+  onSave: (name: string, description: string, color: string, includeInMaster: boolean) => void;
   board?: Board | null; // If provided, edit mode; else create mode
 }
 
@@ -29,16 +29,19 @@ export const BoardModal: React.FC<BoardModalProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState('#2563eb');
+  const [includeInMaster, setIncludeInMaster] = useState(true);
 
   useEffect(() => {
     if (board) {
       setName(board.name || '');
       setDescription(board.description || '');
       setColor(board.color || '#2563eb');
+      setIncludeInMaster(board.includeInMaster !== false);
     } else {
       setName('');
       setDescription('');
       setColor('#2563eb');
+      setIncludeInMaster(true);
     }
   }, [board, isOpen]);
 
@@ -47,7 +50,7 @@ export const BoardModal: React.FC<BoardModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onSave(name.trim(), description.trim(), color);
+    onSave(name.trim(), description.trim(), color, includeInMaster);
     onClose();
   };
 
@@ -135,6 +138,25 @@ export const BoardModal: React.FC<BoardModalProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <label className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200 cursor-pointer transition-colors">
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">
+                  Incluir en Tablero Master
+                </span>
+                <span className="text-[11px] text-slate-500 font-normal block mt-0.5">
+                  Consolida y muestra las tareas de este tablero en la vista Master
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={includeInMaster}
+                onChange={(e) => setIncludeInMaster(e.target.checked)}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0 ml-2"
+              />
+            </label>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">

@@ -9,8 +9,8 @@ interface BoardSelectModalProps {
   boards: Board[];
   currentBoardId: string;
   onSelectBoard: (boardId: string) => void;
-  onAddBoard: (name: string, description: string, color: string) => void;
-  onUpdateBoard: (boardId: string, name: string, description: string, color: string) => void;
+  onAddBoard: (name: string, description: string, color: string, includeInMaster: boolean) => void;
+  onUpdateBoard: (boardId: string, name: string, description: string, color: string, includeInMaster: boolean) => void;
   onDeleteBoard: (boardId: string) => void;
   allTasks: TaskItem[];
 }
@@ -42,11 +42,11 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
     setIsBoardModalOpen(true);
   };
 
-  const handleSaveBoardModal = (name: string, description: string, color: string) => {
+  const handleSaveBoardModal = (name: string, description: string, color: string, includeInMaster: boolean) => {
     if (editingBoard) {
-      onUpdateBoard(editingBoard.id, name, description, color);
+      onUpdateBoard(editingBoard.id, name, description, color, includeInMaster);
     } else {
-      onAddBoard(name, description, color);
+      onAddBoard(name, description, color, includeInMaster);
     }
     setIsBoardModalOpen(false);
     setEditingBoard(null);
@@ -165,11 +165,20 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
                       style={{ backgroundColor: b.color }}
                     />
                     <div className="truncate flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold text-slate-900 truncate">{b.name}</span>
                         {isSelected && (
                           <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-blue-600 text-white">
                             Activo
+                          </span>
+                        )}
+                        {b.includeInMaster !== false ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            ⭐ En Master
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                            No en Master
                           </span>
                         )}
                       </div>

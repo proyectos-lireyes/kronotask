@@ -390,9 +390,9 @@ export const EisenhowerMatrixView: React.FC<EisenhowerMatrixViewProps> = ({
                       <p className="text-[11px] font-bold text-slate-500">Sin tareas aquí</p>
                     </div>
                   ) : (
-                    cellTasks.map((task) => (
+                    cellTasks.map((task, idx) => (
                       <TaskCard
-                        key={task.id}
+                        key={`${task.id}-${idx}`}
                         task={task}
                         allTags={allTags}
                         board={allBoards?.find((b) => b.id === task.boardId)}

@@ -18,6 +18,7 @@ import {
   QuadrantConfig,
   BackgroundTone,
   CloudBackupSnapshot,
+  PlanningPeriodConfig,
 } from './types';
 import {
   loadTasks,
@@ -38,6 +39,8 @@ import {
   saveQuadrantConfig,
   loadBackgroundTone,
   saveBackgroundTone,
+  loadPlanningPeriod,
+  savePlanningPeriod,
 } from './services/storage';
 import {
   initAuth,
@@ -106,11 +109,27 @@ import {
   Settings2,
   X,
   Grid2x2,
+  CalendarRange,
 } from 'lucide-react';
 
 export default function App() {
+  const deduplicateInitialTasks = (rawList: TaskItem[]): TaskItem[] => {
+    const seen = new Set<string>();
+    const result: TaskItem[] = [];
+    rawList.forEach((t, idx) => {
+      if (!t) return;
+      let safeId = t.id || `task-${Date.now()}-${idx}`;
+      if (seen.has(safeId)) {
+        safeId = `${safeId}-dup-${idx}-${Math.random().toString(36).substring(2, 5)}`;
+      }
+      seen.add(safeId);
+      result.push({ ...t, id: safeId });
+    });
+    return result;
+  };
+
   // Persistence States
-  const [tasks, setTasks] = useState<TaskItem[]>(() => loadTasks());
+  const [tasks, setTasks] = useState<TaskItem[]>(() => deduplicateInitialTasks(loadTasks()));
   const [boards, setBoards] = useState<Board[]>(() => loadBoards());
   const [currentBoardId, setCurrentBoardId] = useState<string>(() => {
     try {
@@ -127,10 +146,16 @@ export default function App() {
   const [theme, setTheme] = useState<LightThemeConfig>(() => loadTheme());
   const [bgTone, setBgTone] = useState<BackgroundTone>(() => loadBackgroundTone());
   const [acceptedCollisions, setAcceptedCollisions] = useState<string[]>(() => loadAcceptedCollisions());
+  const [planningPeriod, setPlanningPeriod] = useState<PlanningPeriodConfig>(() => loadPlanningPeriod());
 
   const handleBgToneChange = (tone: BackgroundTone) => {
     setBgTone(tone);
     saveBackgroundTone(tone);
+  };
+
+  const handlePlanningPeriodChange = (config: PlanningPeriodConfig) => {
+    setPlanningPeriod(config);
+    savePlanningPeriod(config);
   };
 
   // User Auth & Biometrics
@@ -258,7 +283,7 @@ export default function App() {
   };
 
   const [settingsInitialTab, setSettingsInitialTab] = useState<
-    'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme'
+    'boards' | 'transfer' | 'planning' | 'types' | 'priorities' | 'tags' | 'theme'
   >('boards');
   const [cloudBackups, setCloudBackups] = useState<CloudBackupSnapshot[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState<boolean>(false);
@@ -443,6 +468,7 @@ export default function App() {
         theme,
         acceptedCollisions,
         bgTone,
+        planningPeriod,
       });
       setCloudBackups(updatedList);
       const nowFormatted = formatBackupDateDisplay(new Date());
@@ -543,6 +569,11 @@ export default function App() {
         if (data.bgTone) {
           setBgTone(data.bgTone);
           saveBackgroundTone(data.bgTone);
+        }
+
+        if (data.planningPeriod) {
+          setPlanningPeriod(data.planningPeriod);
+          savePlanningPeriod(data.planningPeriod);
         }
 
         const nowFormatted = formatBackupDateDisplay(targetSnapshot.createdAt ? new Date(targetSnapshot.createdAt) : new Date());
@@ -669,10 +700,26 @@ export default function App() {
     };
   }, []);
 
+  const deduplicateTasks = (taskList: TaskItem[]): TaskItem[] => {
+    const seen = new Set<string>();
+    const result: TaskItem[] = [];
+    taskList.forEach((t, idx) => {
+      if (!t) return;
+      let safeId = t.id || `task-${Date.now()}-${idx}`;
+      if (seen.has(safeId)) {
+        safeId = `${safeId}-dup-${idx}-${Math.random().toString(36).substring(2, 5)}`;
+      }
+      seen.add(safeId);
+      result.push({ ...t, id: safeId });
+    });
+    return result;
+  };
+
   const updateTasks = (newTasks: TaskItem[]) => {
-    setTasks(newTasks);
-    saveTasks(newTasks);
-    scheduleTaskOSNotifications(newTasks);
+    const cleanTasks = deduplicateTasks(newTasks);
+    setTasks(cleanTasks);
+    saveTasks(cleanTasks);
+    scheduleTaskOSNotifications(cleanTasks);
   };
 
   const handleGoogleSignIn = async () => {
@@ -710,7 +757,8 @@ export default function App() {
     taskId: string,
     newStatus: TaskStatus,
     waitingDays?: number,
-    completionDate?: string
+    completionDate?: string,
+    completionOutcome?: 'completed' | 'missed'
   ) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
@@ -728,7 +776,7 @@ export default function App() {
     }
 
     let extraTask: TaskItem | null = null;
-    if (newStatus === 'done' && task.recurrence?.enabled) {
+    if (newStatus === 'done' && task.recurrence?.enabled && completionOutcome !== 'missed') {
       // Si la tarea forma parte de una serie ya pre-generada en el tablero,
       // comprobamos si ya existen ocurrencias futuras para no duplicarlas
       const hasFutureInSeries = task.recurrenceSeriesId
@@ -746,6 +794,7 @@ export default function App() {
           startDate: nextStart,
           endDate: nextEnd,
           completedAt: null,
+          completionOutcome: null,
           recurrenceIndex: (task.recurrenceIndex || 1) + 1,
           comments: [
             {
@@ -793,6 +842,7 @@ export default function App() {
           endDate,
           frictionPoints,
           completedAt: newStatus === 'done' ? (completionDate || new Date().toISOString()) : null,
+          completionOutcome: newStatus === 'done' ? (completionOutcome || 'completed') : null,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -932,12 +982,13 @@ export default function App() {
   };
 
   // Boards Management
-  const handleAddBoard = (name: string, description: string, color: string) => {
+  const handleAddBoard = (name: string, description: string, color: string, includeInMaster: boolean = true) => {
     const newBoard: Board = {
       id: `board-${Date.now()}`,
       name,
       description,
       color,
+      includeInMaster,
       createdAt: new Date().toISOString(),
     };
     const updated = [...boards, newBoard];
@@ -946,11 +997,11 @@ export default function App() {
     setCurrentBoardId(newBoard.id);
   };
 
-  const handleUpdateBoard = (boardId: string, name: string, description: string, color: string) => {
+  const handleUpdateBoard = (boardId: string, name: string, description: string, color: string, includeInMaster: boolean = true) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const updated = boards.map((b) =>
-      b.id === boardId ? { ...b, name: trimmed, description: description.trim(), color } : b
+      b.id === boardId ? { ...b, name: trimmed, description: description.trim(), color, includeInMaster } : b
     );
     setBoards(updated);
     saveBoards(updated);
@@ -1201,9 +1252,29 @@ export default function App() {
         createdAt: '',
       };
 
-  const boardTasks = isMasterBoard
-    ? tasks
+  const isTaskInPlanningPeriod = (t: TaskItem, plan: PlanningPeriodConfig): boolean => {
+    if (!plan.enabled || !plan.startDate || !plan.endDate) return true;
+    const taskStartMs = new Date(t.startDate).getTime();
+    const planStartMs = new Date(plan.startDate).getTime();
+    const planEndMs = new Date(plan.endDate).getTime();
+
+    // 1. Tarea iniciada dentro del período del plan actual
+    if (taskStartMs >= planStartMs && taskStartMs <= planEndMs) return true;
+
+    // 2. Tarea de plan anterior que aún continúa activa (regla de arrastre inteligente)
+    if (taskStartMs < planStartMs && t.status !== 'done') return true;
+
+    return false;
+  };
+
+  const rawBoardTasks = isMasterBoard
+    ? tasks.filter((t) => {
+        const b = boards.find((board) => board.id === t.boardId);
+        return !b || b.includeInMaster !== false;
+      })
     : tasks.filter((t) => t.boardId === currentBoard.id || (!t.boardId && currentBoard.id === 'board-work'));
+
+  const boardTasks = rawBoardTasks.filter((t) => isTaskInPlanningPeriod(t, planningPeriod));
 
   // Separate active vs completed (sorted strictly by closest deadline / fecha fin más cercana)
   const activeTasks = boardTasks
@@ -1271,6 +1342,51 @@ export default function App() {
 
       {/* Main Single-Scroll Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 flex flex-col gap-3">
+        {/* Active Planning Period Pill / Banner */}
+        {planningPeriod.enabled && planningPeriod.startDate && (
+          <div className="bg-sky-50/90 border border-sky-200/90 rounded-2xl px-3.5 py-2 flex items-center justify-between gap-3 text-xs shadow-2xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="p-1.5 bg-sky-600 text-white rounded-lg shrink-0 shadow-2xs">
+                <CalendarRange className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-sky-950">
+                    {planningPeriod.name || 'Planificación Actual'}
+                  </span>
+                  <span className="text-[11px] text-sky-700 font-medium">
+                    ({new Date(planningPeriod.startDate).toLocaleDateString()} - {new Date(planningPeriod.endDate).toLocaleDateString()})
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300/80">
+                    {boardTasks.length} tareas ({boardTasks.filter((t) => new Date(t.startDate).getTime() < new Date(planningPeriod.startDate).getTime() && t.status !== 'done').length} arrastradas de planes previos)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsInitialTab('planning');
+                  setIsSettingsOpen(true);
+                }}
+                className="px-2.5 py-1 text-[11px] font-bold text-sky-700 hover:text-sky-900 hover:bg-sky-100/70 rounded-lg transition-colors cursor-pointer"
+              >
+                Ajustar Plan
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePlanningPeriodChange({ ...planningPeriod, enabled: false })}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 cursor-pointer"
+                title="Pausar filtro de plan (ver todas las tareas)"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Navigation & Controls Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           {/* Desktop Views Switcher: Eisenhower, Gantt, Tabla, Calendario, Historial */}
@@ -1729,9 +1845,13 @@ export default function App() {
         isOpen={isReportsOpen}
         tasks={boardTasks}
         onClose={() => setIsReportsOpen(false)}
+        onSelectTask={(task) => {
+          setSelectedTask(task);
+          setIsTaskModalOpen(true);
+        }}
       />
 
-      {/* Settings Modal (with Biometrics and Semáforo inside) */}
+      {/* Settings Modal (with Biometrics, Planning and Semáforo inside) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -1770,6 +1890,8 @@ export default function App() {
         cloudSyncStatus={cloudSyncStatus}
         bgTone={bgTone}
         onBgToneChange={handleBgToneChange}
+        planningPeriod={planningPeriod}
+        onPlanningPeriodChange={handlePlanningPeriodChange}
         initialTab={settingsInitialTab}
       />
 
@@ -1855,11 +1977,11 @@ export default function App() {
         isOpen={Boolean(completionModalTask)}
         task={completionModalTask}
         onClose={() => setCompletionModalTask(null)}
-        onConfirm={(completedAtIso) => {
+        onConfirm={(completedAtIso, outcome) => {
           if (completionModalTask) {
             const taskId = completionModalTask.id;
             setCompletionModalTask(null);
-            handleTaskStatusChange(taskId, 'done', undefined, completedAtIso);
+            handleTaskStatusChange(taskId, 'done', undefined, completedAtIso, outcome);
           }
         }}
       />

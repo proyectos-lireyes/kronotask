@@ -269,7 +269,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
                 No hay tareas que inicien dentro del periodo seleccionado ({timeFilter === 'all' ? 'Todas' : timeFilter === '7' ? '1 semana' : timeFilter === '14' ? '2 semanas' : '1 mes'}).
               </div>
             ) : (
-              visibleGanttTasks.map((task) => {
+              visibleGanttTasks.map((task, idx) => {
                 const isDone = task.status === 'done';
                 const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
                 const leftPos = getPositionPercent(task.startDate);
@@ -296,7 +296,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
 
                 return (
                   <div
-                    key={task.id}
+                    key={`${task.id}-${idx}`}
                     onClick={() => onSelectTask(task)}
                     className="flex items-center hover:bg-slate-50 cursor-pointer group transition-colors relative h-12"
                   >

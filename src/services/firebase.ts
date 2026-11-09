@@ -36,6 +36,7 @@ import {
   LightThemeConfig,
   CloudBackupSnapshot,
   BackgroundTone,
+  PlanningPeriodConfig,
 } from '../types';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -260,6 +261,7 @@ export async function saveUserDataToCloud(
     theme?: LightThemeConfig;
     acceptedCollisions?: string[];
     bgTone?: BackgroundTone;
+    planningPeriod?: PlanningPeriodConfig;
   }
 ): Promise<CloudBackupSnapshot[]> {
   let uid = '';

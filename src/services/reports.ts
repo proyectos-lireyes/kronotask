@@ -20,8 +20,9 @@ export function calculateComplianceMetrics(tasks: TaskItem[]): ComplianceMetrics
   let completedTasks = 0;
   let completedOnTime = 0;
   let completedLate = 0;
+  let closedMissedTasks = 0;
   let pendingOnTime = 0;
-  let overdueTasks = 0;
+  let activeOverdue = 0;
   let totalCompletionHours = 0;
 
   const now = Date.now();
@@ -31,28 +32,38 @@ export function calculateComplianceMetrics(tasks: TaskItem[]): ComplianceMetrics
     const start = new Date(task.startDate).getTime();
 
     if (task.status === 'done') {
-      completedTasks++;
-      const completedTime = task.completedAt ? new Date(task.completedAt).getTime() : now;
-      if (completedTime <= end) {
-        completedOnTime++;
+      if (task.completionOutcome === 'missed') {
+        // Tarea cerrada pero NO ejecutada / cita perdida / vencida
+        closedMissedTasks++;
       } else {
-        completedLate++;
+        completedTasks++;
+        const completedTime = task.completedAt ? new Date(task.completedAt).getTime() : now;
+        if (completedTime <= end) {
+          completedOnTime++;
+        } else {
+          completedLate++;
+        }
+        const durationHours = (completedTime - start) / (1000 * 60 * 60);
+        if (durationHours > 0) totalCompletionHours += durationHours;
       }
-      const durationHours = (completedTime - start) / (1000 * 60 * 60);
-      if (durationHours > 0) totalCompletionHours += durationHours;
     } else {
       if (now > end) {
-        overdueTasks++;
+        activeOverdue++;
       } else {
         pendingOnTime++;
       }
     }
   });
 
-  const evaluatedTasks = completedTasks + overdueTasks;
-  const complianceRate = evaluatedTasks > 0
-    ? Math.round((completedOnTime / evaluatedTasks) * 100)
+  // Regla del usuario: La efectividad es (Tareas cerradas a tiempo / Total de tareas cerradas)
+  // Total de tareas cerradas = Tareas completadas a tiempo + Tareas completadas a destiempo + Tareas cerradas no cumplidas
+  const totalClosedTasks = completedTasks + closedMissedTasks;
+  const complianceRate = totalClosedTasks > 0
+    ? Math.round((completedOnTime / totalClosedTasks) * 100)
     : 100;
+
+  // Tareas vencidas en total = Vencidas activas + Cerradas no cumplidas
+  const overdueTasks = activeOverdue + closedMissedTasks;
 
   const averageCompletionHours = completedTasks > 0
     ? Math.round((totalCompletionHours / completedTasks) * 10) / 10
@@ -97,9 +108,13 @@ export function exportTasksToExcel(tasks: TaskItem[]) {
     const timeCalc = calculateTimeLevel(t.startDate, t.endDate, Date.now(), t.status === 'done');
     let complianceStatus = 'En tiempo';
     if (t.status === 'done') {
-      const end = new Date(t.endDate).getTime();
-      const comp = t.completedAt ? new Date(t.completedAt).getTime() : Date.now();
-      complianceStatus = comp <= end ? 'Completado a tiempo' : 'Completado con retraso';
+      if (t.completionOutcome === 'missed') {
+        complianceStatus = 'Cerrada No Cumplida (Vencida sin ejecutar)';
+      } else {
+        const end = new Date(t.endDate).getTime();
+        const comp = t.completedAt ? new Date(t.completedAt).getTime() : Date.now();
+        complianceStatus = comp <= end ? 'Completado a tiempo' : 'Completado con retraso';
+      }
     } else if (timeCalc.isOverdue) {
       complianceStatus = 'Vencido / Fuera de plazo';
     }

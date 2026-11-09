@@ -8,6 +8,8 @@ import {
   QuadrantConfig,
   DEFAULT_QUADRANT_CONFIG,
   BackgroundTone,
+  PlanningPeriodConfig,
+  DEFAULT_PLANNING_PERIOD,
 } from '../types';
 
 const STORAGE_BG_TONE_KEY = 'kronotask_bg_tone_v1';
@@ -122,12 +124,27 @@ export function getInitialTasks(): TaskItem[] {
   return [];
 }
 
+export function deduplicateStorageTasks(tasks: TaskItem[]): TaskItem[] {
+  const seen = new Set<string>();
+  const result: TaskItem[] = [];
+  tasks.forEach((t, idx) => {
+    if (!t) return;
+    let safeId = t.id || `task-${Date.now()}-${idx}`;
+    if (seen.has(safeId)) {
+      safeId = `${safeId}-dup-${idx}-${Math.random().toString(36).substring(2, 5)}`;
+    }
+    seen.add(safeId);
+    result.push({ ...t, id: safeId });
+  });
+  return result;
+}
+
 export function loadTasks(): TaskItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_TASKS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return deduplicateStorageTasks(parsed);
     }
   } catch (e) {
     console.error('Error loading tasks:', e);
@@ -137,7 +154,8 @@ export function loadTasks(): TaskItem[] {
 
 export function saveTasks(tasks: TaskItem[]) {
   try {
-    localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(tasks));
+    const clean = deduplicateStorageTasks(tasks);
+    localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(clean));
   } catch (e) {
     console.error('Error saving tasks:', e);
   }
@@ -321,4 +339,33 @@ export function saveQuadrantConfig(config: QuadrantConfig) {
     console.error('Error saving quadrant config:', e);
   }
 }
+
+const STORAGE_PLANNING_PERIOD_KEY = 'kronotask_planning_period_v1';
+
+export function loadPlanningPeriod(): PlanningPeriodConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_PLANNING_PERIOD_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.enabled === 'boolean') {
+        return {
+          ...DEFAULT_PLANNING_PERIOD,
+          ...parsed,
+        };
+      }
+    }
+  } catch (e) {
+    console.error('Error loading planning period:', e);
+  }
+  return DEFAULT_PLANNING_PERIOD;
+}
+
+export function savePlanningPeriod(config: PlanningPeriodConfig) {
+  try {
+    localStorage.setItem(STORAGE_PLANNING_PERIOD_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.error('Error saving planning period:', e);
+  }
+}
+
 

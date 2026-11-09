@@ -37,11 +37,32 @@ export function calculateTimeLevel(
   startDateStr: string,
   endDateStr: string,
   now: number = Date.now(),
-  isCompleted: boolean = false
+  isCompleted: boolean = false,
+  outcome?: 'completed' | 'missed' | null
 ): TimeCalculation {
   const start = new Date(startDateStr).getTime();
   const end = new Date(endDateStr).getTime();
   const totalDurationMs = Math.max(60000, end - start); // At least 1 minute
+
+  if (isCompleted && outcome === 'missed') {
+    return {
+      level: 'black',
+      percentElapsed: 100,
+      percentRemaining: 0,
+      isOverdue: true,
+      notStarted: false,
+      remainingMs: 0,
+      remainingText: 'No Cumplida (Vencida)',
+      totalDurationMs,
+      label: 'Cerrada No Cumplida (Vencida)',
+      badgeBg: 'bg-stone-900 text-rose-300 border-stone-800',
+      badgeText: 'text-rose-400',
+      borderColor: 'border-rose-900',
+      progressColor: 'bg-stone-900',
+      cardAccentBg: 'bg-rose-50/70',
+      cardRing: 'focus-within:ring-rose-900',
+    };
+  }
 
   const remainingMs = end - now;
   const isOverdue = remainingMs < 0;

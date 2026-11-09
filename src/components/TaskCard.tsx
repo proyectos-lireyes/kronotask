@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Zap,
   Repeat,
+  XCircle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from '../services/notifications';
@@ -81,8 +82,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   bgTone = 'cream',
 }) => {
   const isDone = task.status === 'done';
+  const isMissed = isDone && task.completionOutcome === 'missed';
   const isWaiting = task.status === 'waiting';
-  const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone);
+  const timeCalc = calculateTimeLevel(task.startDate, task.endDate, Date.now(), isDone, task.completionOutcome);
   const mismatch = detectTaskStatusMismatch(task, Date.now());
   const urgencyInfo = calculateTaskUrgencyInfo(task, undefined, Date.now());
   const isBlack = !isDone && timeCalc.level === 'black';
@@ -139,6 +141,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     const qStyle = getQuadrantStyle(urgencyInfo.quadrantNumber);
 
     if (isDone) {
+      if (isMissed) {
+        return 'border-l-4 border-l-rose-600 border-rose-300 bg-rose-50/70 text-rose-900 opacity-80';
+      }
       if (bgTone === 'cream') {
         return 'border-l-4 border-l-slate-400 border-[#dedad0] bg-[#efebe1]/70 text-slate-500 opacity-70';
       }
@@ -194,22 +199,34 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           type="button"
           onClick={handleComplete}
           className={`shrink-0 p-0 transition-colors cursor-pointer ${
-            isDone
+            isMissed
+              ? 'text-rose-600 hover:text-rose-700'
+              : isDone
               ? 'text-emerald-600 hover:text-emerald-700'
               : 'text-slate-300 hover:text-emerald-600'
           }`}
-          title={isDone ? 'Reabrir tarea' : 'Marcar como completada'}
+          title={isDone ? (isMissed ? 'No Cumplida (Vencida). Clic para reabrir.' : 'Completada. Clic para reabrir.') : 'Marcar como completada'}
         >
-          <CheckCircle2 className="w-3.5 h-3.5" />
+          {isMissed ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
         </button>
 
         <h3
           className={`text-xs font-bold leading-tight break-words flex-1 min-w-0 ${
-            isDone ? 'line-through text-slate-400 font-normal' : 'text-slate-900 group-hover:text-blue-700'
+            isMissed
+              ? 'line-through text-rose-600/80 font-medium'
+              : isDone
+              ? 'line-through text-slate-400 font-normal'
+              : 'text-slate-900 group-hover:text-blue-700'
           }`}
         >
           {task.title}
         </h3>
+
+        {isMissed && (
+          <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-bold text-[9px] border border-rose-300 shrink-0">
+            No Cumplida
+          </span>
+        )}
 
         {/* Fecha de Inicio al lado del nombre */}
         {task.startDate && (

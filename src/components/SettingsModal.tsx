@@ -12,9 +12,11 @@ import {
   ImportResolutionMode,
   BackgroundTone,
   CloudBackupSnapshot,
+  PlanningPeriodConfig,
 } from '../types';
 import { LIGHT_THEMES } from '../services/storage';
 import { TIME_COLOR_LEGEND } from '../utils/timeColor';
+import { CustomDateTimePicker } from './CustomDateTimePicker';
 import {
   registerBiometricCredential,
   verifyBiometricCredential,
@@ -63,14 +65,16 @@ import {
   Sparkles,
   AlertTriangle,
   History,
+  CalendarRange,
+  Calendar,
 } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   boards: Board[];
-  onAddBoard: (name: string, description: string, color: string) => void;
-  onUpdateBoard?: (boardId: string, name: string, description: string, color: string) => void;
+  onAddBoard: (name: string, description: string, color: string, includeInMaster?: boolean) => void;
+  onUpdateBoard?: (boardId: string, name: string, description: string, color: string, includeInMaster?: boolean) => void;
   onDeleteBoard: (boardId: string) => void;
   types: CustomTypeDefinition[];
   onAddType: (name: string, color: string) => void;
@@ -97,7 +101,9 @@ interface SettingsModalProps {
   cloudSyncStatus?: { loading: boolean; lastSyncTime: string | null; msg: string | null; isError?: boolean };
   bgTone?: BackgroundTone;
   onBgToneChange?: (tone: BackgroundTone) => void;
-  initialTab?: 'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme';
+  planningPeriod?: PlanningPeriodConfig;
+  onPlanningPeriodChange?: (config: PlanningPeriodConfig) => void;
+  initialTab?: 'boards' | 'transfer' | 'planning' | 'types' | 'priorities' | 'tags' | 'theme';
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -132,10 +138,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   cloudSyncStatus,
   bgTone = 'cream',
   onBgToneChange,
+  planningPeriod = { enabled: false, startDate: '', endDate: '', name: 'Plan Actual' },
+  onPlanningPeriodChange,
   initialTab,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'boards' | 'transfer' | 'semaforo' | 'biometria' | 'types' | 'priorities' | 'tags' | 'theme'
+    'boards' | 'transfer' | 'planning' | 'types' | 'priorities' | 'tags' | 'theme'
   >(initialTab || 'boards');
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false);
 
@@ -187,12 +195,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newBoardName, setNewBoardName] = useState('');
   const [newBoardDesc, setNewBoardDesc] = useState('');
   const [newBoardColor, setNewBoardColor] = useState('#2563eb');
+  const [newBoardIncludeInMaster, setNewBoardIncludeInMaster] = useState(true);
 
   // Board Edit State
   const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
   const [editBoardName, setEditBoardName] = useState('');
   const [editBoardDesc, setEditBoardDesc] = useState('');
   const [editBoardColor, setEditBoardColor] = useState('#2563eb');
+  const [editBoardIncludeInMaster, setEditBoardIncludeInMaster] = useState(true);
 
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeColor, setNewTypeColor] = useState('#64748b');
@@ -228,9 +238,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleCreateBoard = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBoardName.trim()) return;
-    onAddBoard(newBoardName.trim(), newBoardDesc.trim(), newBoardColor);
+    onAddBoard(newBoardName.trim(), newBoardDesc.trim(), newBoardColor, newBoardIncludeInMaster);
     setNewBoardName('');
     setNewBoardDesc('');
+    setNewBoardIncludeInMaster(true);
   };
 
   const handleCreateType = (e: React.FormEvent) => {
@@ -427,6 +438,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       bg: 'bg-blue-50',
     },
     {
+      id: 'planning' as const,
+      label: 'Planificación Actual',
+      description: 'Fechas de inicio y fin del plan activo y arrastre de tareas',
+      icon: CalendarRange,
+      color: 'text-sky-600',
+      bg: 'bg-sky-50',
+      badge: planningPeriod?.enabled ? 'Activo' : undefined,
+    },
+    {
       id: 'transfer' as const,
       label: 'Compartir y Respaldo',
       description: 'Exportar e importar Base64 o Sincronizar en la nube',
@@ -441,23 +461,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       icon: Palette,
       color: 'text-purple-600',
       bg: 'bg-purple-50',
-    },
-    {
-      id: 'semaforo' as const,
-      label: 'Semáforo de Tiempo',
-      description: 'Código de colores y alertas de vencimiento',
-      icon: Clock,
-      color: 'text-amber-500',
-      bg: 'bg-amber-50',
-    },
-    {
-      id: 'biometria' as const,
-      label: 'Biometría y Seguridad',
-      description: 'Huella / FaceID y bloqueo de la bóveda',
-      icon: Fingerprint,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-      badge: biometricRecord.registered ? 'Activo' : undefined,
     },
     {
       id: 'types' as const,
@@ -1161,6 +1164,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   </div>
                 </div>
+                <label className="flex items-center gap-2 pt-1 text-xs text-slate-700 font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newBoardIncludeInMaster}
+                    onChange={(e) => setNewBoardIncludeInMaster(e.target.checked)}
+                    className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+                  />
+                  <span>⭐ Incluir tareas en Tablero Master</span>
+                </label>
               </form>
 
               <div className="space-y-2">
@@ -1174,7 +1186,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onSubmit={(e) => {
                           e.preventDefault();
                           if (!editBoardName.trim()) return;
-                          onUpdateBoard?.(b.id, editBoardName.trim(), editBoardDesc.trim(), editBoardColor);
+                          onUpdateBoard?.(b.id, editBoardName.trim(), editBoardDesc.trim(), editBoardColor, editBoardIncludeInMaster);
                           setEditingBoardId(null);
                         }}
                         className="p-3 bg-blue-50/60 rounded-2xl border-2 border-blue-400 space-y-2 animate-in fade-in duration-150"
@@ -1211,6 +1223,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           className="w-full p-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                         />
 
+                        <label className="flex items-center gap-2 text-xs text-slate-800 font-bold cursor-pointer pt-1">
+                          <input
+                            type="checkbox"
+                            checked={editBoardIncludeInMaster}
+                            onChange={(e) => setEditBoardIncludeInMaster(e.target.checked)}
+                            className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+                          />
+                          <span>⭐ Incluir en Tablero Master</span>
+                        </label>
+
                         <div className="flex items-center justify-between pt-1">
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] text-slate-600 font-semibold">Color:</span>
@@ -1243,6 +1265,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     );
                   }
 
+                  const isIncludedInMaster = b.includeInMaster !== false;
+
                   return (
                     <div
                       key={b.id}
@@ -1261,7 +1285,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {/* Checkbox rápido para activar/desactivar inclusión en Master */}
+                        <label
+                          className={`flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-xl border cursor-pointer transition-colors ${
+                            isIncludedInMaster
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                              : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                          }`}
+                          title="Alternar inclusión en Tablero Master"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isIncludedInMaster}
+                            onChange={(e) => {
+                              onUpdateBoard?.(b.id, b.name, b.description || '', b.color, e.target.checked);
+                            }}
+                            className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer"
+                          />
+                          <span>{isIncludedInMaster ? '⭐ En Master' : 'No en Master'}</span>
+                        </label>
+
                         <button
                           type="button"
                           onClick={() => {
@@ -1269,6 +1313,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             setEditBoardName(b.name);
                             setEditBoardDesc(b.description || '');
                             setEditBoardColor(b.color);
+                            setEditBoardIncludeInMaster(b.includeInMaster !== false);
                           }}
                           className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
                           title="Cambiar nombre / Editar tablero"
@@ -1293,144 +1338,308 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB: SEMÁFORO */}
-          {activeTab === 'semaforo' && (
-            <div className="space-y-3">
-              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
-                <span className="font-bold flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-amber-600" />
-                  Semáforo de Tiempo Disponible
-                </span>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
-                  KronoTask calcula el porcentaje del plazo consumido entre la fecha de inicio y la fecha de entrega. La tarjeta cambia su color íntegramente y se ordenan por fecha de entrega más próxima.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                {TIME_COLOR_LEGEND.map((item) => (
-                  <div
-                    key={item.level}
-                    className="p-3 rounded-2xl border border-slate-200 bg-white flex items-center justify-between gap-3 shadow-2xs"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="w-4 h-4 rounded-full shadow-xs shrink-0"
-                        style={{ backgroundColor: item.colorHex }}
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold text-slate-900">{item.title}</h4>
-                          <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${item.badgeBg}`}>
-                            {item.range}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{item.description}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB: BIOMETRÍA */}
-          {activeTab === 'biometria' && (
+          {/* TAB: PLANIFICACIÓN ACTUAL */}
+          {activeTab === 'planning' && (
             <div className="space-y-4">
-              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs text-indigo-900 space-y-1">
-                <div className="flex items-center gap-2 font-bold">
-                  <Fingerprint className="w-4 h-4 text-indigo-600" />
-                  <span>Seguridad Biométrica (Huella Dactilar / FaceID)</span>
+              {/* Header card with Toggle */}
+              <div className="p-4 bg-sky-50/70 border border-sky-200 rounded-2xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-xs">
+                    <CalendarRange className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-sky-950">
+                      Período de Planificación Actual
+                    </h3>
+                    <p className="text-xs text-sky-700 mt-0.5">
+                      Filtra las tareas al horizonte actual con arrastre inteligente de pendientes
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[11px] text-indigo-800 leading-relaxed">
-                  Protege tus tareas sensibles y bloquea la aplicación localmente en el dispositivo.
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={planningPeriod.enabled}
+                    onChange={(e) => {
+                      if (!onPlanningPeriodChange) return;
+                      const willEnable = e.target.checked;
+                      let start = planningPeriod.startDate;
+                      let end = planningPeriod.endDate;
+                      if (willEnable && (!start || !end)) {
+                        const now = new Date();
+                        const startD = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+                        const endD = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                        start = startD.toISOString();
+                        end = endD.toISOString();
+                      }
+                      onPlanningPeriodChange({
+                        ...planningPeriod,
+                        enabled: willEnable,
+                        startDate: start,
+                        endDate: end,
+                      });
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+                </label>
+              </div>
+
+              {/* Carry-over rule explanation callout */}
+              <div className="p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-2xl text-xs text-amber-900 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-amber-950">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Regla de Continuidad y Arrastre de Tareas</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Al fijar las fechas del plan, tu tablero mostrará solo las tareas que inicien en ese rango.
+                  <strong> Las tareas de planes anteriores que sigan activas (no completadas)</strong> se arrastrarán automáticamente a tu plan actual para no perder su ejecución. Las que ya fueron completadas quedarán archivadas en su período correspondiente.
                 </p>
               </div>
 
-              {bioMsg && (
-                <div
-                  className={`p-3 rounded-2xl border text-xs font-semibold flex items-center gap-2 ${
-                    bioMsg.isError
-                      ? 'bg-rose-50 border-rose-200 text-rose-800'
-                      : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  }`}
-                >
-                  {bioMsg.isError ? (
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  )}
-                  <span>{bioMsg.text}</span>
-                </div>
-              )}
-
-              <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-indigo-600" />
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">Estado de Biometría</p>
-                      <p className="text-[11px] text-slate-500">
-                        {biometricRecord.registered
-                          ? `Enrolado: ${biometricRecord.userName || 'Usuario'} (${biometricRecord.registeredAt || 'Activo'})`
-                          : 'No configurado en este navegador / dispositivo'}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      biometricRecord.registered
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {biometricRecord.registered ? 'Protegido' : 'Inactivo'}
-                  </span>
+              {/* Form settings */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-4 shadow-2xs">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nombre del Plan / Sprint (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={planningPeriod.name || ''}
+                    placeholder="ej. Sprint 1 - Noviembre / Metas Q4"
+                    onChange={(e) => {
+                      if (onPlanningPeriodChange) {
+                        onPlanningPeriodChange({
+                          ...planningPeriod,
+                          name: e.target.value,
+                        });
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-sky-500 focus:bg-white outline-none"
+                  />
                 </div>
 
-                <div className="pt-2 flex flex-wrap gap-2">
-                  {!biometricRecord.registered ? (
+                {/* Presets */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Accesos Rápidos de Rango
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <button
                       type="button"
-                      disabled={bioLoading}
-                      onClick={handleEnrollBio}
-                      className="py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                      onClick={() => {
+                        if (!onPlanningPeriodChange) return;
+                        const now = new Date();
+                        const day = now.getDay();
+                        const diffToMonday = (day === 0 ? -6 : 1) - day;
+                        const monday = new Date(now);
+                        monday.setDate(now.getDate() + diffToMonday);
+                        monday.setHours(0, 0, 0, 0);
+                        const sunday = new Date(monday);
+                        sunday.setDate(monday.getDate() + 6);
+                        sunday.setHours(23, 59, 59, 999);
+                        onPlanningPeriodChange({
+                          ...planningPeriod,
+                          enabled: true,
+                          startDate: monday.toISOString(),
+                          endDate: sunday.toISOString(),
+                          name: planningPeriod.name || 'Esta Semana',
+                        });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700 text-slate-700 font-medium transition-all text-center cursor-pointer text-[11px]"
                     >
-                      <Fingerprint className="w-4 h-4" />
-                      {bioLoading ? 'Registrando...' : 'Enrolar Huella / Clave Local'}
+                      Esta Semana
                     </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        disabled={bioLoading}
-                        onClick={handleTestBio}
-                        className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                        Probar Autenticación
-                      </button>
 
-                      <button
-                        type="button"
-                        onClick={handleLockNow}
-                        className="py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Lock className="w-4 h-4" />
-                        Bloquear Pantalla Ahora
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!onPlanningPeriodChange) return;
+                        const now = new Date();
+                        now.setHours(0, 0, 0, 0);
+                        const end = new Date(now);
+                        end.setDate(now.getDate() + 14);
+                        end.setHours(23, 59, 59, 999);
+                        onPlanningPeriodChange({
+                          ...planningPeriod,
+                          enabled: true,
+                          startDate: now.toISOString(),
+                          endDate: end.toISOString(),
+                          name: planningPeriod.name || 'Próximos 15 Días',
+                        });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700 text-slate-700 font-medium transition-all text-center cursor-pointer text-[11px]"
+                    >
+                      Próximos 15 Días
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={handleRemoveBio}
-                        className="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ml-auto"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Desactivar
-                      </button>
-                    </>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!onPlanningPeriodChange) return;
+                        const now = new Date();
+                        const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+                        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                        onPlanningPeriodChange({
+                          ...planningPeriod,
+                          enabled: true,
+                          startDate: start.toISOString(),
+                          endDate: end.toISOString(),
+                          name: planningPeriod.name || 'Este Mes',
+                        });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700 text-slate-700 font-medium transition-all text-center cursor-pointer text-[11px]"
+                    >
+                      Este Mes
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!onPlanningPeriodChange) return;
+                        const now = new Date();
+                        const start = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0);
+                        const end = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59);
+                        onPlanningPeriodChange({
+                          ...planningPeriod,
+                          enabled: true,
+                          startDate: start.toISOString(),
+                          endDate: end.toISOString(),
+                          name: planningPeriod.name || 'Próximo Mes',
+                        });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700 text-slate-700 font-medium transition-all text-center cursor-pointer text-[11px]"
+                    >
+                      Próximo Mes
+                    </button>
+                  </div>
+                </div>
+
+                {/* Date Pickers */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Fecha de Inicio del Plan
+                    </label>
+                    <CustomDateTimePicker
+                      value={planningPeriod.startDate || new Date().toISOString()}
+                      onChange={(newStart) => {
+                        if (!onPlanningPeriodChange) return;
+                        let end = planningPeriod.endDate;
+                        const startMs = new Date(newStart).getTime();
+                        const endMs = end ? new Date(end).getTime() : 0;
+                        // Auto-shift if end <= start
+                        if (!end || endMs <= startMs) {
+                          const shifted = new Date(startMs + 14 * 24 * 60 * 60 * 1000);
+                          end = shifted.toISOString();
+                        }
+                        onPlanningPeriodChange({
+                          ...planningPeriod,
+                          startDate: newStart,
+                          endDate: end,
+                        });
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Fecha de Fin del Plan
+                    </label>
+                    <CustomDateTimePicker
+                      value={
+                        planningPeriod.endDate ||
+                        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+                      }
+                      minDate={planningPeriod.startDate}
+                      onChange={(newEnd) => {
+                        if (!onPlanningPeriodChange) return;
+                        onPlanningPeriodChange({
+                          ...planningPeriod,
+                          endDate: newEnd,
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Plan Tasks Preview Metrics */}
+              {planningPeriod.startDate && planningPeriod.endDate && (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">
+                      Balance de Tareas para este Plan
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        planningPeriod.enabled
+                          ? 'bg-sky-100 text-sky-800 border border-sky-300'
+                          : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {planningPeriod.enabled ? 'Filtro Activo' : 'Filtro Pausado'}
+                    </span>
+                  </div>
+
+                  {(() => {
+                    const startMs = new Date(planningPeriod.startDate).getTime();
+                    const endMs = new Date(planningPeriod.endDate).getTime();
+                    let inPeriod = 0;
+                    let carriedOver = 0;
+                    let archivedDone = 0;
+                    let futureTasks = 0;
+
+                    allTasks.forEach((t) => {
+                      const tStart = new Date(t.startDate).getTime();
+                      if (tStart >= startMs && tStart <= endMs) {
+                        inPeriod++;
+                      } else if (tStart < startMs) {
+                        if (t.status !== 'done') {
+                          carriedOver++;
+                        } else {
+                          archivedDone++;
+                        }
+                      } else if (tStart > endMs) {
+                        futureTasks++;
+                      }
+                    });
+
+                    const totalInCurrentPlan = inPeriod + carriedOver;
+
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-center">
+                        <div className="p-2.5 bg-white rounded-xl border border-sky-200 shadow-2xs">
+                          <span className="text-xl font-black text-sky-700">{totalInCurrentPlan}</span>
+                          <p className="text-[10px] font-bold text-sky-900 uppercase mt-0.5">
+                            Total en Plan Actual
+                          </p>
+                          <p className="text-[9px] text-slate-400">
+                            {inPeriod} nuevas + {carriedOver} arrastradas
+                          </p>
+                        </div>
+
+                        <div className="p-2.5 bg-white rounded-xl border border-amber-200 shadow-2xs">
+                          <span className="text-xl font-black text-amber-700">{carriedOver}</span>
+                          <p className="text-[10px] font-bold text-amber-900 uppercase mt-0.5">
+                            Pendientes Arrastradas
+                          </p>
+                          <p className="text-[9px] text-amber-700">De planes previos</p>
+                        </div>
+
+                        <div className="p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs col-span-2 sm:col-span-1">
+                          <span className="text-xl font-black text-slate-600">{archivedDone}</span>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">
+                            Completadas Previas
+                          </p>
+                          <p className="text-[9px] text-slate-400">Archivadas fuera de vista</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
 
