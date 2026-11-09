@@ -355,6 +355,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                       <td className="py-3 px-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold border text-[11px] ${timeCalc.badgeBg}`}
+                          title={`Semáforo: ${timeCalc.remainingText} | Fecha límite: ${new Date(task.endDate).toLocaleString('es-ES')}`}
                         >
                           <span
                             className={`w-2 h-2 rounded-full ${
@@ -365,14 +366,35 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                                 : 'bg-current'
                             }`}
                           />
-                          {timeCalc.remainingText}
+                          <span>{timeCalc.remainingText}</span>
+                          {task.endDate && (
+                            <span className="opacity-75 font-semibold border-l border-current/30 pl-1.5">
+                              Fin: {new Date(task.endDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                            </span>
+                          )}
                         </span>
                       </td>
 
                       {/* 2. Full Task Name */}
                       <td className="py-3 px-4 min-w-[300px] sm:min-w-[360px]">
-                        <div className="font-bold text-slate-900 text-xs sm:text-sm break-words whitespace-normal leading-relaxed">
-                          {task.title}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900 text-xs sm:text-sm break-words whitespace-normal leading-relaxed">
+                            {task.title}
+                          </span>
+                          {task.startDate && (
+                            <span
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded font-semibold text-[10px] leading-tight border shrink-0 bg-slate-100 text-slate-700 border-slate-200"
+                              title={`Fecha de inicio: ${new Date(task.startDate).toLocaleString('es-ES')}`}
+                            >
+                              <span className="text-slate-400 font-normal">Ini:</span>
+                              <span>
+                                {new Date(task.startDate).toLocaleDateString('es-ES', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                })}
+                              </span>
+                            </span>
+                          )}
                         </div>
                         {task.description && (
                           <p className="text-[11px] text-slate-500 mt-0.5 break-words whitespace-normal leading-relaxed line-clamp-2">

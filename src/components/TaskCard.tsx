@@ -17,6 +17,48 @@ import {
 import confetti from 'canvas-confetti';
 import { soundService } from '../services/notifications';
 
+const formatCardDate = (dateStr?: string | null): string => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const day = d.getDate();
+    const month = months[d.getMonth()] || '';
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    const currentYear = new Date().getFullYear();
+    const yearPart = d.getFullYear() !== currentYear ? ` ${d.getFullYear()}` : '';
+
+    if (hours !== 0 || minutes !== 0) {
+      const hh = String(hours).padStart(2, '0');
+      const mm = String(minutes).padStart(2, '0');
+      return `${day} ${month}${yearPart}, ${hh}:${mm}`;
+    }
+    return `${day} ${month}${yearPart}`;
+  } catch {
+    return '';
+  }
+};
+
+const formatFullDateTime = (dateStr?: string | null): string => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('es-ES', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+};
+
 interface TaskCardProps {
   task: TaskItem;
   allTags: CustomTag[];
@@ -124,6 +166,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       ? 'bg-[#e2e7ed] text-slate-800 border-[#d2d7de]'
       : 'bg-slate-100 text-slate-700 border-slate-200/80';
 
+  const dateBadgeClass =
+    bgTone === 'cream'
+      ? 'bg-[#ede8db] text-amber-950/80 border-[#ded8c8]'
+      : bgTone === 'gray'
+      ? 'bg-[#e2e7ed] text-slate-800 border-[#d2d7de]'
+      : 'bg-slate-100 text-slate-700 border-slate-200/80';
+
   const arrowBtnHover =
     bgTone === 'cream'
       ? 'hover:bg-[#eae5d8] text-amber-900/60 hover:text-amber-950'
@@ -139,7 +188,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       className={`group relative rounded-lg border px-2 py-1 transition-all duration-150 hover:shadow-2xs cursor-pointer select-none active:scale-[0.99] animate-in fade-in duration-200 ${getCardColorClass()}`}
       title="Toca para ver o editar la información completa"
     >
-      {/* Fila 1 (Arriba): Checkbox + Nombre Completo de la Tarea */}
+      {/* Fila 1 (Arriba): Checkbox + Nombre Completo de la Tarea + Fecha Inicio */}
       <div className="flex items-center gap-1.5 min-w-0">
         <button
           type="button"
@@ -161,6 +210,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         >
           {task.title}
         </h3>
+
+        {/* Fecha de Inicio al lado del nombre */}
+        {task.startDate && (
+          <span
+            className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded font-semibold text-[10px] leading-tight border shrink-0 ${dateBadgeClass}`}
+            title={`Fecha de inicio: ${formatFullDateTime(task.startDate)}`}
+          >
+            <span className="opacity-60 font-normal">Ini:</span>
+            <span>{formatCardDate(task.startDate)}</span>
+          </span>
+        )}
 
         {task.recurrenceSeriesId && task.recurrenceIndex ? (
           <span
@@ -187,13 +247,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         )}
       </div>
 
-      {/* Fila 2 (Abajo): Tiempo Queda/Inicia, Tablero, Criticidad y Flechas (en una sola línea sin desbordar altura) */}
+      {/* Fila 2 (Abajo): Tiempo Queda/Inicia con Fecha Fin, Tablero, Criticidad y Flechas */}
       <div className="flex items-center justify-between gap-1 mt-0.5 min-w-0">
         <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
-          {/* 1. Tiempo Queda / Inicia con Horas y Minutos */}
+          {/* 1. Tiempo Queda / Inicia con Horas y Minutos + Fecha Fin */}
           <span
             className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-extrabold text-[10px] leading-tight shrink-0 ${timeCalc.badgeBg}`}
-            title={`Nivel ${timeCalc.label}: ${timeCalc.remainingText}`}
+            title={`Nivel ${timeCalc.label}: ${timeCalc.remainingText}${task.endDate ? ` | Fecha fin (entrega): ${formatFullDateTime(task.endDate)}` : ''}`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full shrink-0 ${
@@ -205,6 +265,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               }`}
             />
             <span className="truncate">{timeCalc.remainingText}</span>
+            {task.endDate && (
+              <span className="opacity-80 font-semibold border-l border-current/30 pl-1 shrink-0">
+                Fin: {formatCardDate(task.endDate)}
+              </span>
+            )}
           </span>
 
           {/* 2. Tablero / Etiqueta */}
