@@ -892,15 +892,24 @@ export default function App() {
 
         if (exists || taskToSave.recurrenceSeriesId) {
           // Mantener tareas completadas anteriores de esta serie para no alterar su historial
+          const existingSeriesTasks = tasks.filter((t) => t.recurrenceSeriesId === seriesId);
           const otherTasks = tasks.filter((t) => t.recurrenceSeriesId !== seriesId && t.id !== taskToSave.id);
           const completedFromSeries = tasks.filter((t) => t.recurrenceSeriesId === seriesId && t.status === 'done');
           const pendingGenerated = generatedSeries.filter(
             (gen) => !completedFromSeries.some((c) => c.recurrenceIndex === gen.recurrenceIndex)
           );
+
+          const keepIds = new Set([
+            ...completedFromSeries.map((c) => c.id),
+            ...pendingGenerated.map((p) => p.id),
+          ]);
+          const removedFromSeries = existingSeriesTasks.filter((t) => !keepIds.has(t.id));
+
           const updated = [...completedFromSeries, ...pendingGenerated, ...otherTasks];
           updateTasks(updated);
           if (currentUser && realtimeSyncEnabled) {
             pendingGenerated.forEach((gen) => syncSingleTaskToCloud(currentUser, gen));
+            removedFromSeries.forEach((rem) => deleteSingleTaskFromCloud(currentUser, rem.id));
           }
           return;
         } else {

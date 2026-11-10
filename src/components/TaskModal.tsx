@@ -181,7 +181,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setRecurrenceInterval(task.recurrence?.interval || 15);
       setRecurrenceUnit(task.recurrence?.unit || 'days');
       setRecurrenceWeekDays(task.recurrence?.weekDays || []);
-      setRecurrenceEndCondition(task.recurrence?.endCondition || 'until_date');
+      setRecurrenceEndCondition(
+        task.recurrence?.endCondition || (task.recurrence?.repeatCount ? 'count' : 'until_date')
+      );
       if (task.recurrence?.repeatUntilDate) {
         setRecurrenceUntilDate(toDateTimeLocal(new Date(task.recurrence.repeatUntilDate)));
       } else {
@@ -271,7 +273,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           weekDays: recurrenceWeekDays.length > 0 ? recurrenceWeekDays : undefined,
           endCondition: recurrenceEndCondition,
           repeatUntilDate: untilIso,
-          repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : undefined,
+          repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : (recurrenceCount || undefined),
         },
         50
       );
@@ -358,7 +360,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             weekDays: recurrenceWeekDays.length > 0 ? recurrenceWeekDays : undefined,
             endCondition: recurrenceEndCondition,
             repeatUntilDate: recurrenceEndCondition === 'until_date' && recurrenceUntilDate ? new Date(recurrenceUntilDate).toISOString() : undefined,
-            repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : undefined,
+            repeatCount: recurrenceEndCondition === 'count' ? Math.max(1, recurrenceCount) : (recurrenceCount ? Math.max(1, recurrenceCount) : undefined),
             generateInstances,
           }
         : undefined,
@@ -1430,7 +1432,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 min={1}
                                 max={60}
                                 value={recurrenceCount}
-                                onChange={(e) => setRecurrenceCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                onChange={(e) => {
+                                  setRecurrenceCount(Math.max(1, parseInt(e.target.value) || 1));
+                                  setRecurrenceEndCondition('count');
+                                }}
                                 className="w-24 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 font-bold"
                               />
                               <div className="flex flex-wrap items-center gap-1">
@@ -1438,9 +1443,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                   <button
                                     key={cnt}
                                     type="button"
-                                    onClick={() => setRecurrenceCount(cnt)}
+                                    onClick={() => {
+                                      setRecurrenceCount(cnt);
+                                      setRecurrenceEndCondition('count');
+                                    }}
                                     className={`px-2 py-1 text-[10px] font-bold rounded-md border cursor-pointer ${
-                                      recurrenceCount === cnt
+                                      recurrenceCount === cnt && recurrenceEndCondition === 'count'
                                         ? 'bg-indigo-600 text-white border-indigo-600'
                                         : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-indigo-50'
                                     }`}

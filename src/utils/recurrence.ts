@@ -115,7 +115,7 @@ export function calculateAllOccurrences(
   let currentIndex = 1;
 
   // Determinar condición de fin
-  const endCondition = recurrence.endCondition || (recurrence.repeatUntilDate ? 'until_date' : recurrence.repeatCount ? 'count' : 'until_date');
+  const endCondition = recurrence.endCondition || (recurrence.repeatCount ? 'count' : recurrence.repeatUntilDate ? 'until_date' : 'until_date');
 
   let untilTimeMs: number | null = null;
   if (endCondition === 'until_date') {
@@ -123,7 +123,7 @@ export function calculateAllOccurrences(
       untilTimeMs = new Date(recurrence.repeatUntilDate).getTime();
     } else {
       // Si la fecha de fin de la tarea es mayor que el primer intervalo, usar esa fecha como límite
-      const firstCycleNextMs = addRecurrenceInterval(start, interval, unit).getTime();
+      const firstCycleNextMs = addRecurrenceInterval(start, interval, unit, recurrence.weekDays).getTime();
       if (end.getTime() > firstCycleNextMs) {
         untilTimeMs = end.getTime();
       } else {
@@ -135,11 +135,15 @@ export function calculateAllOccurrences(
     }
   }
 
-  const maxCount = endCondition === 'count'
-    ? Math.min(Math.max(1, recurrence.repeatCount || 1), maxCap)
-    : endCondition === 'never'
-    ? Math.min(12, maxCap)
-    : maxCap;
+  // Determinar número máximo de ocurrencias (priorizando repeatCount si existe)
+  let maxCount = maxCap;
+  if (recurrence.repeatCount && recurrence.repeatCount > 0) {
+    maxCount = Math.min(Math.max(1, recurrence.repeatCount), maxCap);
+  } else if (endCondition === 'count' && recurrence.repeatCount) {
+    maxCount = Math.min(Math.max(1, recurrence.repeatCount), maxCap);
+  } else if (endCondition === 'never') {
+    maxCount = Math.min(12, maxCap);
+  }
 
   while (currentIndex < maxCount) {
     const nextStart = addRecurrenceInterval(currentStart, interval, unit, recurrence.weekDays);
@@ -234,11 +238,13 @@ export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
   if (weekDays && weekDays.length > 0) {
     const daysStr = weekDays.map((d) => dayNamesShort[d]).join(', ');
     let baseText = `Días específicos: ${daysStr}`;
-    if (endCondition === 'until_date' && repeatUntilDate) {
+    if ((endCondition === 'count' || (!endCondition && repeatCount)) && repeatCount) {
+      baseText += ` · ${repeatCount} repeticiones`;
+    } else if (endCondition === 'until_date' && repeatUntilDate) {
       const d = new Date(repeatUntilDate);
       const dateStr = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
       baseText += ` · Hasta ${dateStr}`;
-    } else if (endCondition === 'count' && repeatCount) {
+    } else if (repeatCount) {
       baseText += ` · ${repeatCount} repeticiones`;
     }
     return baseText;
@@ -256,11 +262,13 @@ export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
   const label = interval === 1 ? unitMap[unit].singular : `${interval} ${unitMap[unit].plural}`;
   let baseText = `Cada ${label}`;
 
-  if (endCondition === 'until_date' && repeatUntilDate) {
+  if ((endCondition === 'count' || (!endCondition && repeatCount)) && repeatCount) {
+    baseText += ` · ${repeatCount} repeticiones`;
+  } else if (endCondition === 'until_date' && repeatUntilDate) {
     const d = new Date(repeatUntilDate);
     const dateStr = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
     baseText += ` · Hasta ${dateStr}`;
-  } else if (endCondition === 'count' && repeatCount) {
+  } else if (repeatCount) {
     baseText += ` · ${repeatCount} repeticiones`;
   }
 
