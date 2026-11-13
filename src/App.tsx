@@ -66,7 +66,13 @@ import {
   requestNotificationPermission,
   soundService,
 } from './services/notifications';
-import { calculateNextOccurrence, generateRecurringTaskSeries } from './utils/recurrence';
+import {
+  calculateNextOccurrence,
+  generateRecurringTaskSeries,
+  extendRecurringSeries,
+  stopRecurringSeriesAfter,
+  RecurrenceCompletionAction,
+} from './utils/recurrence';
 import { calculateTimeLevel } from './utils/timeColor';
 import { detectCollisions } from './utils/collisionUtils';
 import { getNextSundayEnd } from './utils/prioritySort';
@@ -758,7 +764,8 @@ export default function App() {
     newStatus: TaskStatus,
     waitingDays?: number,
     completionDate?: string,
-    completionOutcome?: 'completed' | 'missed'
+    completionOutcome?: 'completed' | 'missed',
+    recurrenceAction?: RecurrenceCompletionAction
   ) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
@@ -776,7 +783,13 @@ export default function App() {
     }
 
     let extraTask: TaskItem | null = null;
-    if (newStatus === 'done' && task.recurrence?.enabled && completionOutcome !== 'missed') {
+    if (
+      newStatus === 'done' &&
+      task.recurrence?.enabled &&
+      completionOutcome !== 'missed' &&
+      recurrenceAction?.type !== 'extend' &&
+      recurrenceAction?.type !== 'finish'
+    ) {
       // Si la tarea forma parte de una serie ya pre-generada en el tablero,
       // comprobamos si ya existen ocurrencias futuras para no duplicarlas
       const hasFutureInSeries = task.recurrenceSeriesId
@@ -811,7 +824,7 @@ export default function App() {
       }
     }
 
-    const updatedTasks = tasks.map((t) => {
+    let updatedTasks = tasks.map((t) => {
       if (t.id === taskId) {
         let waitingSince = t.waitingSince;
         let frictionPoints = t.frictionPoints || 0;
@@ -834,6 +847,15 @@ export default function App() {
           waitingSince = null;
         }
 
+        const updatedRecurrence =
+          newStatus === 'done' && recurrenceAction?.type === 'finish' && t.recurrence
+            ? {
+                ...t.recurrence,
+                endCondition: (t.recurrence.endCondition === 'never' ? 'count' : t.recurrence.endCondition) as 'until_date' | 'count' | 'never',
+                repeatCount: t.recurrenceIndex || 1,
+              }
+            : t.recurrence;
+
         return {
           ...t,
           status: newStatus,
@@ -841,6 +863,7 @@ export default function App() {
           waitingDays: currentWaitingDays,
           endDate,
           frictionPoints,
+          recurrence: updatedRecurrence,
           completedAt: newStatus === 'done' ? (completionDate || new Date().toISOString()) : null,
           completionOutcome: newStatus === 'done' ? (completionOutcome || 'completed') : null,
           updatedAt: new Date().toISOString(),
@@ -848,6 +871,71 @@ export default function App() {
       }
       return t;
     });
+
+    const closedTask = updatedTasks.find((t) => t.id === taskId);
+
+    if (newStatus === 'done' && closedTask && recurrenceAction?.type === 'extend') {
+      const { updatedExistingTasks, newlyCreatedTasks, newTotal } = extendRecurringSeries(
+        updatedTasks,
+        closedTask,
+        recurrenceAction.extraCycles
+      );
+      const updatedMap = new Map(updatedExistingTasks.map((t) => [t.id, t]));
+      updatedTasks = [
+        ...newlyCreatedTasks,
+        ...updatedTasks.map((t) => updatedMap.get(t.id) || t),
+      ];
+      setInAppNotifications((prev) => [
+        ...prev,
+        {
+          id: `notif-ext-${Date.now()}`,
+          title: 'Periodicidad Extendida',
+          body: `Se agregaron ${newlyCreatedTasks.length} ciclos nuevos a "${task.title}" (Total: ${newTotal} ciclos).`,
+          type: 'info',
+          timestamp: new Date().toISOString(),
+          taskId: newlyCreatedTasks[0]?.id,
+        },
+      ]);
+      updateTasks(updatedTasks);
+      if (currentUser && realtimeSyncEnabled) {
+        updatedExistingTasks.forEach((t) => syncSingleTaskToCloud(currentUser, t));
+        newlyCreatedTasks.forEach((t) => syncSingleTaskToCloud(currentUser, t));
+      }
+      return;
+    }
+
+    if (newStatus === 'done' && closedTask && recurrenceAction?.type === 'finish') {
+      const { updatedRemainingTasks, removedTaskIds } = stopRecurringSeriesAfter(
+        updatedTasks,
+        closedTask
+      );
+      const removedSet = new Set(removedTaskIds);
+      const remainingMap = new Map(updatedRemainingTasks.map((t) => [t.id, t]));
+      updatedTasks = updatedTasks
+        .filter((t) => !removedSet.has(t.id))
+        .map((t) => remainingMap.get(t.id) || t);
+
+      setInAppNotifications((prev) => [
+        ...prev,
+        {
+          id: `notif-stop-${Date.now()}`,
+          title: 'Seguimiento Periódico Finalizado',
+          body:
+            removedTaskIds.length > 0
+              ? `Se cerró "${task.title}" y se eliminaron ${removedTaskIds.length} ciclos futuros pendientes.`
+              : `Se cerró "${task.title}" y se detuvo la generación de nuevos ciclos.`,
+          type: 'info',
+          timestamp: new Date().toISOString(),
+          taskId: closedTask.id,
+        },
+      ]);
+      updateTasks(updatedTasks);
+      if (currentUser && realtimeSyncEnabled) {
+        updatedRemainingTasks.forEach((t) => syncSingleTaskToCloud(currentUser, t));
+        removedTaskIds.forEach((id) => deleteSingleTaskFromCloud(currentUser, id));
+      }
+      return;
+    }
 
     if (extraTask) {
       updatedTasks.unshift(extraTask);
@@ -874,29 +962,134 @@ export default function App() {
     }
   };
 
+  const handleExtendSeries = (referenceTask: TaskItem, extraCycles: number) => {
+    const { updatedExistingTasks, newlyCreatedTasks, newTotal } = extendRecurringSeries(
+      tasks,
+      referenceTask,
+      extraCycles
+    );
+    const updatedMap = new Map(updatedExistingTasks.map((t) => [t.id, t]));
+    const nextTasks = [
+      ...newlyCreatedTasks,
+      ...tasks.map((t) => updatedMap.get(t.id) || t),
+    ];
+    updateTasks(nextTasks);
+
+    setInAppNotifications((prev) => [
+      ...prev,
+      {
+        id: `notif-ext-modal-${Date.now()}`,
+        title: 'Periodicidad Extendida',
+        body: `Se agregaron ${newlyCreatedTasks.length} ciclos nuevos a "${referenceTask.title}" (Total: ${newTotal}).`,
+        type: 'info',
+        timestamp: new Date().toISOString(),
+        taskId: newlyCreatedTasks[0]?.id,
+      },
+    ]);
+
+    if (currentUser && realtimeSyncEnabled) {
+      updatedExistingTasks.forEach((t) => syncSingleTaskToCloud(currentUser, t));
+      newlyCreatedTasks.forEach((t) => syncSingleTaskToCloud(currentUser, t));
+    }
+  };
+
+  const handleStopSeriesAfter = (referenceTask: TaskItem) => {
+    const { updatedRemainingTasks, removedTaskIds } = stopRecurringSeriesAfter(
+      tasks,
+      referenceTask
+    );
+    const removedSet = new Set(removedTaskIds);
+    const remainingMap = new Map(updatedRemainingTasks.map((t) => [t.id, t]));
+    const nextTasks = tasks
+      .filter((t) => !removedSet.has(t.id))
+      .map((t) => remainingMap.get(t.id) || t);
+
+    updateTasks(nextTasks);
+
+    setInAppNotifications((prev) => [
+      ...prev,
+      {
+        id: `notif-stop-modal-${Date.now()}`,
+        title: 'Seguimiento Periódico Finalizado',
+        body:
+          removedTaskIds.length > 0
+            ? `Se eliminaron ${removedTaskIds.length} ciclos futuros pendientes de "${referenceTask.title}".`
+            : `Se detuvo el seguimiento futuro de "${referenceTask.title}".`,
+        type: 'info',
+        timestamp: new Date().toISOString(),
+        taskId: referenceTask.id,
+      },
+    ]);
+
+    if (currentUser && realtimeSyncEnabled) {
+      updatedRemainingTasks.forEach((t) => syncSingleTaskToCloud(currentUser, t));
+      removedTaskIds.forEach((id) => deleteSingleTaskFromCloud(currentUser, id));
+    }
+  };
+
   const handleSaveTask = (taskToSave: TaskItem, options?: { editScope?: 'single' | 'series' }) => {
     const editScope = options?.editScope || 'series';
-    const exists = tasks.some((t) => t.id === taskToSave.id);
+    const originalTask = tasks.find((t) => t.id === taskToSave.id);
+    const exists = Boolean(originalTask);
 
     // Si la tarea tiene periodicidad habilitada y está activo el flag para generar tareas en el tablero
     if (taskToSave.recurrence?.enabled && taskToSave.recurrence.generateInstances !== false) {
       if (!exists || editScope === 'series' || !taskToSave.recurrenceSeriesId) {
         const seriesId = taskToSave.recurrenceSeriesId || `series-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-        const generatedSeries = generateRecurringTaskSeries(
-          {
-            ...taskToSave,
-            recurrenceSeriesId: seriesId,
-          },
-          { seriesId }
-        );
+        const existingSeriesTasks = tasks.filter((t) => t.recurrenceSeriesId === seriesId);
+
+        // Si se edita la serie desde un ciclo posterior al 1 sin cambiar sus fechas manualmente,
+        // anclamos la generación en el ciclo 1 original para conservar las fechas previas de la serie.
+        let anchorBaseTask: TaskItem = {
+          ...taskToSave,
+          recurrenceSeriesId: seriesId,
+        };
+        if (
+          originalTask &&
+          originalTask.recurrenceIndex &&
+          originalTask.recurrenceIndex > 1 &&
+          originalTask.startDate === taskToSave.startDate &&
+          originalTask.endDate === taskToSave.endDate &&
+          existingSeriesTasks.length > 1
+        ) {
+          const firstCycle = [...existingSeriesTasks].sort(
+            (a, b) => (a.recurrenceIndex || 1) - (b.recurrenceIndex || 1)
+          )[0];
+          if (firstCycle) {
+            anchorBaseTask = {
+              ...taskToSave,
+              id: firstCycle.id,
+              status: firstCycle.status,
+              completedAt: firstCycle.completedAt,
+              startDate: firstCycle.startDate,
+              endDate: firstCycle.endDate,
+              recurrenceSeriesId: seriesId,
+              recurrenceIndex: firstCycle.recurrenceIndex || 1,
+              createdAt: firstCycle.createdAt,
+            };
+          }
+        }
+
+        const generatedSeries = generateRecurringTaskSeries(anchorBaseTask, { seriesId });
 
         if (exists || taskToSave.recurrenceSeriesId) {
           // Mantener tareas completadas anteriores de esta serie para no alterar su historial
-          const existingSeriesTasks = tasks.filter((t) => t.recurrenceSeriesId === seriesId);
           const otherTasks = tasks.filter((t) => t.recurrenceSeriesId !== seriesId && t.id !== taskToSave.id);
-          const completedFromSeries = tasks.filter((t) => t.recurrenceSeriesId === seriesId && t.status === 'done');
+          const completedFromSeries = tasks
+            .filter((t) => t.recurrenceSeriesId === seriesId && t.status === 'done')
+            .map((c) => ({
+              ...c,
+              recurrenceTotal: generatedSeries.length,
+              recurrence: c.recurrence
+                ? { ...c.recurrence, repeatCount: generatedSeries.length }
+                : taskToSave.recurrence,
+            }));
           const pendingGenerated = generatedSeries.filter(
             (gen) => !completedFromSeries.some((c) => c.recurrenceIndex === gen.recurrenceIndex)
+          ).map((gen) =>
+            gen.recurrenceIndex === taskToSave.recurrenceIndex
+              ? { ...gen, id: taskToSave.id, status: taskToSave.status, completedAt: taskToSave.completedAt }
+              : gen
           );
 
           const keepIds = new Set([
@@ -908,6 +1101,7 @@ export default function App() {
           const updated = [...completedFromSeries, ...pendingGenerated, ...otherTasks];
           updateTasks(updated);
           if (currentUser && realtimeSyncEnabled) {
+            completedFromSeries.forEach((c) => syncSingleTaskToCloud(currentUser, c));
             pendingGenerated.forEach((gen) => syncSingleTaskToCloud(currentUser, gen));
             removedFromSeries.forEach((rem) => deleteSingleTaskFromCloud(currentUser, rem.id));
           }
@@ -1847,6 +2041,8 @@ export default function App() {
         onSave={handleSaveTask}
         onDelete={handleDeleteTask}
         onAddTag={handleAddTag}
+        onExtendSeries={handleExtendSeries}
+        onStopSeriesAfter={handleStopSeriesAfter}
       />
 
       {/* Reports Modal */}
@@ -1985,12 +2181,13 @@ export default function App() {
       <CompletionDateModal
         isOpen={Boolean(completionModalTask)}
         task={completionModalTask}
+        allTasks={tasks}
         onClose={() => setCompletionModalTask(null)}
-        onConfirm={(completedAtIso, outcome) => {
+        onConfirm={(completedAtIso, outcome, recurrenceAction) => {
           if (completionModalTask) {
             const taskId = completionModalTask.id;
             setCompletionModalTask(null);
-            handleTaskStatusChange(taskId, 'done', undefined, completedAtIso, outcome);
+            handleTaskStatusChange(taskId, 'done', undefined, completedAtIso, outcome, recurrenceAction);
           }
         }}
       />

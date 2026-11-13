@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TaskItem } from '../types';
+import { RecurrenceCompletionAction, getFuturePendingSeriesTasks } from '../utils/recurrence';
 import { CustomDateTimePicker } from './CustomDateTimePicker';
 import {
   CheckCircle2,
@@ -12,35 +13,57 @@ import {
   Edit3,
   XCircle,
   AlertCircle,
-  HelpCircle,
+  Repeat,
+  PlusCircle,
+  StopCircle,
 } from 'lucide-react';
 
 interface CompletionDateModalProps {
   isOpen: boolean;
   task: TaskItem | null;
+  allTasks?: TaskItem[];
   onClose: () => void;
-  onConfirm: (completedAtIso: string, outcome: 'completed' | 'missed') => void;
+  onConfirm: (
+    completedAtIso: string,
+    outcome: 'completed' | 'missed',
+    recurrenceAction?: RecurrenceCompletionAction
+  ) => void;
 }
 
 export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
   isOpen,
   task,
+  allTasks = [],
   onClose,
   onConfirm,
 }) => {
   const [outcome, setOutcome] = useState<'completed' | 'missed'>('completed');
   const [closureOption, setClosureOption] = useState<'scheduled' | 'now' | 'custom'>('scheduled');
   const [customCompletedAt, setCustomCompletedAt] = useState<string>('');
+  const [seriesAction, setSeriesAction] = useState<'continue' | 'extend' | 'finish'>('continue');
+  const [extraCycles, setExtraCycles] = useState<number>(3);
 
   useEffect(() => {
     if (isOpen && task) {
       setOutcome('completed');
       setClosureOption('scheduled');
       setCustomCompletedAt(new Date().toISOString());
+      setSeriesAction('continue');
+      setExtraCycles(3);
     }
   }, [isOpen, task]);
 
   if (!isOpen || !task) return null;
+
+  const isRecurring = Boolean(task.recurrence?.enabled || task.recurrenceSeriesId);
+  const futurePendingTasks = isRecurring ? getFuturePendingSeriesTasks(allTasks, task) : [];
+  const seriesTasks = task.recurrenceSeriesId
+    ? allTasks.filter((t) => t.recurrenceSeriesId === task.recurrenceSeriesId)
+    : [task];
+  const currentIndex = task.recurrenceIndex || 1;
+  const totalCount = task.recurrenceTotal || seriesTasks.length || 1;
+  const hasFuturePending = futurePendingTasks.length > 0;
+  const isContinuous = task.recurrence?.endCondition === 'never';
 
   const scheduledEnd = new Date(task.endDate);
 
@@ -87,7 +110,17 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirm(getEffectiveCompletedIso(), outcome);
+    let recurrenceAction: RecurrenceCompletionAction | undefined;
+    if (isRecurring) {
+      if (seriesAction === 'extend') {
+        recurrenceAction = { type: 'extend', extraCycles: Math.max(1, extraCycles || 1) };
+      } else if (seriesAction === 'finish') {
+        recurrenceAction = { type: 'finish' };
+      } else {
+        recurrenceAction = { type: 'continue' };
+      }
+    }
+    onConfirm(getEffectiveCompletedIso(), outcome, recurrenceAction);
   };
 
   return (
@@ -384,6 +417,172 @@ export const CompletionDateModal: React.FC<CompletionDateModalProps> = ({
                     </>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Recurring Series Control: Extend or Finish Early */}
+          {isRecurring && (
+            <div className="p-3.5 bg-indigo-50/80 border border-indigo-200 rounded-2xl space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-extrabold text-indigo-950">
+                  <Repeat className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>Seguimiento de Actividad Periódica</span>
+                </div>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-white text-indigo-700 border border-indigo-200 shrink-0">
+                  {isContinuous
+                    ? `Ciclo ${currentIndex} · Continuo`
+                    : `Ciclo ${currentIndex} de ${totalCount}`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-1.5">
+                {/* Default Continue / Normal option */}
+                <button
+                  type="button"
+                  onClick={() => setSeriesAction('continue')}
+                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    seriesAction === 'continue'
+                      ? 'bg-white border-indigo-500 ring-2 ring-indigo-500/20 text-slate-900 shadow-2xs'
+                      : 'bg-white/70 border-indigo-100 hover:bg-white text-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`p-1.5 rounded-lg mt-0.5 shrink-0 ${
+                      seriesAction === 'continue'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-indigo-100/70 text-indigo-600'
+                    }`}
+                  >
+                    <Repeat className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold block">
+                      {hasFuturePending
+                        ? 'Continuar con la serie programada'
+                        : isContinuous
+                        ? 'Generar siguiente ciclo automáticamente'
+                        : 'Concluir serie aquí (último ciclo)'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                      {hasFuturePending
+                        ? `Quedan ${futurePendingTasks.length} ${
+                            futurePendingTasks.length === 1 ? 'ciclo pendiente' : 'ciclos pendientes'
+                          } programados después de este.`
+                        : isContinuous
+                        ? `Se programará el ciclo ${currentIndex + 1} al cerrar.`
+                        : 'Cierra este último ciclo sin generar más repeticiones.'}
+                    </span>
+                  </div>
+                </button>
+
+                {/* Option: Extend recurrence (+N cycles) */}
+                {!isContinuous && (
+                  <button
+                    type="button"
+                    onClick={() => setSeriesAction('extend')}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      seriesAction === 'extend'
+                        ? 'bg-white border-blue-500 ring-2 ring-blue-500/20 text-slate-900 shadow-2xs'
+                        : 'bg-white/70 border-indigo-100 hover:bg-white text-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`p-1.5 rounded-lg mt-0.5 shrink-0 ${
+                        seriesAction === 'extend'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-blue-100/70 text-blue-600'
+                      }`}
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold block text-blue-950">
+                        Aún no termina · Extender periodicidad
+                      </span>
+                      <span className="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                        Agrega ciclos adicionales después del ciclo {totalCount} manteniendo la misma frecuencia.
+                      </span>
+                    </div>
+                  </button>
+                )}
+
+                {seriesAction === 'extend' && !isContinuous && (
+                  <div className="p-2.5 bg-white rounded-xl border border-blue-200 space-y-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-700">
+                        ¿Cuántos ciclos adicionales agregar?
+                      </span>
+                      <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                        {totalCount} → {totalCount + Math.max(1, extraCycles || 1)} ciclos
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[1, 2, 3, 6].map((cnt) => (
+                        <button
+                          key={cnt}
+                          type="button"
+                          onClick={() => setExtraCycles(cnt)}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border cursor-pointer transition-all ${
+                            extraCycles === cnt
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-blue-50'
+                          }`}
+                        >
+                          +{cnt} {cnt === 1 ? 'ciclo' : 'ciclos'}
+                        </button>
+                      ))}
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input
+                          type="number"
+                          min={1}
+                          max={60}
+                          value={extraCycles}
+                          onChange={(e) => setExtraCycles(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          className="w-16 px-2 py-1 text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg text-center text-slate-900"
+                        />
+                        <span className="text-[11px] text-slate-500 font-semibold">más</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Option: Resolved early / Stop future follow-up */}
+                {(hasFuturePending || isContinuous) && (
+                  <button
+                    type="button"
+                    onClick={() => setSeriesAction('finish')}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      seriesAction === 'finish'
+                        ? 'bg-white border-amber-500 ring-2 ring-amber-500/20 text-slate-900 shadow-2xs'
+                        : 'bg-white/70 border-indigo-100 hover:bg-white text-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`p-1.5 rounded-lg mt-0.5 shrink-0 ${
+                        seriesAction === 'finish'
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-amber-100/70 text-amber-700'
+                      }`}
+                    >
+                      <StopCircle className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold block text-amber-950">
+                        Ya se resolvió · No hacer más seguimiento
+                      </span>
+                      <span className="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                        {hasFuturePending
+                          ? `Cierra este ciclo y elimina los ${futurePendingTasks.length} ${
+                              futurePendingTasks.length === 1
+                                ? 'ciclo futuro pendiente'
+                                : 'ciclos futuros pendientes'
+                            }.`
+                          : 'Cierra este ciclo y detiene la creación automática de ciclos futuros.'}
+                      </span>
+                    </div>
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -91,7 +91,7 @@ export function calculateAllOccurrences(
   startDateIso: string,
   endDateIso: string,
   recurrence: RecurrenceRule,
-  maxCap: number = 60
+  maxCap: number = 90
 ): OccurrenceDateRange[] {
   if (!recurrence || !recurrence.enabled) {
     return [{ startDate: startDateIso, endDate: endDateIso, index: 1 }];
@@ -135,12 +135,10 @@ export function calculateAllOccurrences(
     }
   }
 
-  // Determinar número máximo de ocurrencias (priorizando repeatCount si existe)
+  // Determinar número máximo de ocurrencias según la condición activa
   let maxCount = maxCap;
-  if (recurrence.repeatCount && recurrence.repeatCount > 0) {
-    maxCount = Math.min(Math.max(1, recurrence.repeatCount), maxCap);
-  } else if (endCondition === 'count' && recurrence.repeatCount) {
-    maxCount = Math.min(Math.max(1, recurrence.repeatCount), maxCap);
+  if (endCondition === 'count') {
+    maxCount = Math.min(Math.max(1, recurrence.repeatCount || 1), maxCap);
   } else if (endCondition === 'never') {
     maxCount = Math.min(12, maxCap);
   }
@@ -219,6 +217,191 @@ export function generateRecurringTaskSeries(
       updatedAt: new Date().toISOString(),
     };
   });
+}
+
+export type RecurrenceCompletionAction =
+  | { type: 'continue' }
+  | { type: 'extend'; extraCycles: number }
+  | { type: 'finish' };
+
+/**
+ * Obtiene las tareas futuras pendientes (no completadas) de la misma serie posteriores a `currentTask`.
+ */
+export function getFuturePendingSeriesTasks(allTasks: TaskItem[], currentTask: TaskItem): TaskItem[] {
+  if (!currentTask.recurrenceSeriesId) return [];
+  const currentIdx = currentTask.recurrenceIndex || 0;
+  const currentStartMs = new Date(currentTask.startDate).getTime();
+
+  return allTasks.filter((t) => {
+    if (t.recurrenceSeriesId !== currentTask.recurrenceSeriesId) return false;
+    if (t.id === currentTask.id) return false;
+    if (t.status === 'done') return false;
+
+    if (currentIdx > 0 && t.recurrenceIndex) {
+      return t.recurrenceIndex > currentIdx;
+    }
+    return new Date(t.startDate).getTime() > currentStartMs;
+  });
+}
+
+/**
+ * Extiende una serie periódica existente agregando `extraCycles` ciclos adicionales
+ * después del último ciclo programado en la serie.
+ */
+export function extendRecurringSeries(
+  allTasks: TaskItem[],
+  referenceTask: TaskItem,
+  extraCycles: number
+): {
+  seriesId: string;
+  updatedExistingTasks: TaskItem[];
+  newlyCreatedTasks: TaskItem[];
+  newTotal: number;
+} {
+  const safeExtra = Math.max(1, Math.min(60, Math.round(extraCycles || 1)));
+  const seriesId =
+    referenceTask.recurrenceSeriesId ||
+    `series-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+  const seriesTasks = referenceTask.recurrenceSeriesId
+    ? allTasks.filter((t) => t.recurrenceSeriesId === seriesId)
+    : [referenceTask];
+
+  const sortedSeries = [...seriesTasks].sort((a, b) => {
+    const idxDiff = (a.recurrenceIndex || 0) - (b.recurrenceIndex || 0);
+    if (idxDiff !== 0) return idxDiff;
+    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+  });
+
+  const anchorLastTask = sortedSeries[sortedSeries.length - 1] || referenceTask;
+  const maxExistingIndex = sortedSeries.reduce(
+    (max, t, idx) => Math.max(max, t.recurrenceIndex || idx + 1),
+    1
+  );
+  const newTotal = maxExistingIndex + safeExtra;
+
+  const baseRule: RecurrenceRule = {
+    enabled: true,
+    interval: Math.max(1, referenceTask.recurrence?.interval || anchorLastTask.recurrence?.interval || 1),
+    unit: referenceTask.recurrence?.unit || anchorLastTask.recurrence?.unit || 'weeks',
+    weekDays: referenceTask.recurrence?.weekDays || anchorLastTask.recurrence?.weekDays,
+    endCondition:
+      referenceTask.recurrence?.endCondition === 'never' ? 'never' : 'count',
+    repeatCount: newTotal,
+    generateInstances: true,
+  };
+
+  const existingIds = new Set(allTasks.map((t) => t.id));
+  const newlyCreatedTasks: TaskItem[] = [];
+
+  let curStart = anchorLastTask.startDate;
+  let curEnd = anchorLastTask.endDate;
+  const nowIso = new Date().toISOString();
+
+  for (let i = 1; i <= safeExtra; i++) {
+    const nextIndex = maxExistingIndex + i;
+    const { nextStart, nextEnd } = calculateNextOccurrence(curStart, curEnd, baseRule);
+
+    let newId = `task-${seriesId}-${nextIndex}`;
+    if (existingIds.has(newId)) {
+      newId = `task-${seriesId}-${nextIndex}-${Date.now().toString(36).slice(-4)}`;
+    }
+    existingIds.add(newId);
+
+    newlyCreatedTasks.push({
+      ...referenceTask,
+      id: newId,
+      status: 'todo',
+      waitingSince: null,
+      waitingDays: undefined,
+      frictionPoints: 0,
+      startDate: nextStart,
+      endDate: nextEnd,
+      completedAt: null,
+      completionOutcome: null,
+      recurrence: { ...baseRule },
+      recurrenceSeriesId: seriesId,
+      recurrenceIndex: nextIndex,
+      recurrenceTotal: newTotal,
+      comments: [],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+
+    curStart = nextStart;
+    curEnd = nextEnd;
+  }
+
+  // Actualizar los totales y regla de repetición en las tareas existentes de la serie
+  const updatedExistingTasks: TaskItem[] = sortedSeries.map((t, idx) => ({
+    ...t,
+    recurrenceSeriesId: seriesId,
+    recurrenceIndex: t.recurrenceIndex || idx + 1,
+    recurrenceTotal: newTotal,
+    recurrence: t.recurrence
+      ? {
+          ...t.recurrence,
+          enabled: true,
+          repeatCount: newTotal,
+          endCondition: (t.recurrence.endCondition === 'never' ? 'never' : 'count') as RecurrenceRule['endCondition'],
+        }
+      : { ...baseRule },
+    updatedAt: nowIso,
+  }));
+
+  return {
+    seriesId,
+    updatedExistingTasks,
+    newlyCreatedTasks,
+    newTotal,
+  };
+}
+
+/**
+ * Detiene el seguimiento de una serie periódica después de `currentTask`,
+ * eliminando todas las ocurrencias futuras pendientes y ajustando el total de ciclos.
+ */
+export function stopRecurringSeriesAfter(
+  allTasks: TaskItem[],
+  currentTask: TaskItem
+): {
+  updatedRemainingTasks: TaskItem[];
+  removedTaskIds: string[];
+  newTotal: number;
+} {
+  const futurePending = getFuturePendingSeriesTasks(allTasks, currentTask);
+  const removedIds = new Set(futurePending.map((t) => t.id));
+
+  const remainingSeriesTasks = currentTask.recurrenceSeriesId
+    ? allTasks.filter(
+        (t) => t.recurrenceSeriesId === currentTask.recurrenceSeriesId && !removedIds.has(t.id)
+      )
+    : [currentTask];
+
+  const newTotal = Math.max(
+    currentTask.recurrenceIndex || 1,
+    remainingSeriesTasks.length
+  );
+  const nowIso = new Date().toISOString();
+
+  const updatedRemainingTasks: TaskItem[] = remainingSeriesTasks.map((t) => ({
+    ...t,
+    recurrenceTotal: newTotal,
+    recurrence: t.recurrence
+      ? {
+          ...t.recurrence,
+          endCondition: (t.recurrence.endCondition === 'never' ? 'count' : t.recurrence.endCondition) as RecurrenceRule['endCondition'],
+          repeatCount: newTotal,
+        }
+      : undefined,
+    updatedAt: nowIso,
+  }));
+
+  return {
+    updatedRemainingTasks,
+    removedTaskIds: Array.from(removedIds),
+    newTotal,
+  };
 }
 
 export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
