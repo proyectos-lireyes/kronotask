@@ -224,7 +224,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       }
       setRecurrenceCount(task.recurrence?.repeatCount || 6);
       setGenerateInstances(task.recurrence?.generateInstances !== false);
-      setSeriesEditScope('series');
+      setSeriesEditScope(task.recurrenceSeriesId ? 'single' : 'series');
       setReminders(task.reminders || []);
       setAttachments(task.attachments || []);
       setComments(task.comments || []);
@@ -458,7 +458,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         ? Math.min(finalEndMs, startMs + sessionDurationMs)
         : finalEndMs;
 
-    const effectiveRecurrence = recurrenceEnabled
+    const isSingleCycleEdit = Boolean(task?.recurrenceSeriesId && seriesEditScope === 'single');
+    const effectiveRecurrence = isSingleCycleEdit
+      ? task?.recurrence
+      : recurrenceEnabled
       ? {
           enabled: true,
           interval: Math.max(1, recurrenceInterval),
@@ -617,21 +620,100 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </p>
             </div>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer shrink-0">
-            <input
-              type="checkbox"
-              checked={recurrenceEnabled}
-              onChange={(e) => {
-                setRecurrenceEnabled(e.target.checked);
-                setRecurrenceTouchedManually(true);
-              }}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-          </label>
+          {!(task?.recurrenceSeriesId && seriesEditScope === 'single') && (
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={recurrenceEnabled}
+                onChange={(e) => {
+                  setRecurrenceEnabled(e.target.checked);
+                  setRecurrenceTouchedManually(true);
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+          )}
         </div>
 
-        {recurrenceEnabled && (
+        {task?.recurrenceSeriesId && seriesEditScope === 'single' ? (
+          <div className="pt-3 border-t border-slate-200 space-y-3">
+            <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-2 flex-wrap">
+              <div className="text-xs text-blue-950">
+                <p className="font-bold">
+                  Modo ciclo individual ({task.recurrenceIndex || 1}/{task.recurrenceTotal || '?'})
+                </p>
+                <p className="text-[11px] text-blue-800/90 mt-0.5">
+                  Cambiar su fecha, hora o duración solo modificará este ciclo, sin afectar a los demás.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSeriesEditScope('series')}
+                className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-700 border border-blue-300 rounded-lg text-[11px] font-bold cursor-pointer transition-colors shrink-0"
+              >
+                Editar regla de toda la serie
+              </button>
+            </div>
+
+            {(() => {
+              const futurePending = getFuturePendingSeriesTasks(allTasks, task);
+              const totalCycles = task.recurrenceTotal || previewOccurrences.length || 1;
+              if (!onExtendSeries && !(onStopSeriesAfter && futurePending.length > 0)) return null;
+              return (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
+                  {onExtendSeries && (
+                    <div className="flex items-center justify-between gap-2 flex-wrap bg-white p-2 rounded-lg border border-amber-200/80">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-800">
+                        <PlusCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>¿Aún no termina? Agregar ciclos al final:</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={1}
+                          max={60}
+                          value={quickExtendCycles}
+                          onChange={(e) => setQuickExtendCycles(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          className="w-14 px-2 py-1 text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg text-center text-slate-900"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onExtendSeries(task, Math.max(1, quickExtendCycles));
+                            onClose();
+                          }}
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
+                        >
+                          + Extender ({totalCycles} → {totalCycles + Math.max(1, quickExtendCycles)})
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {onStopSeriesAfter && futurePending.length > 0 && (
+                    <div className="flex items-center justify-between gap-2 flex-wrap bg-white p-2 rounded-lg border border-amber-200/80">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-800">
+                        <StopCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>¿Ya se resolvió? Quedan {futurePending.length} ciclos futuros.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onStopSeriesAfter(task);
+                          onClose();
+                        }}
+                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        Detener seguimiento aquí
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        ) : recurrenceEnabled && (
           <div className="pt-3 border-t border-slate-200 grid grid-cols-2 gap-3">
             {/* Horas de dedicación efectiva por microtarea cuando supera 2 días */}
             {isMicrotaskMode && (
@@ -1515,6 +1597,47 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Selector de alcance visible al editar un ciclo de una serie */}
+                  {task?.recurrenceSeriesId && (
+                    <div className="p-2.5 bg-white rounded-xl border border-indigo-200/90 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                          <Repeat className="w-3.5 h-3.5 text-indigo-600" />
+                          Ciclo {task.recurrenceIndex || 1} de {task.recurrenceTotal || '?'} · ¿A qué aplica este cambio?
+                        </span>
+                        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[11px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setSeriesEditScope('single')}
+                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                              seriesEditScope === 'single'
+                                ? 'bg-blue-600 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Solo este ciclo ({task.recurrenceIndex || 1}/{task.recurrenceTotal || '?'})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSeriesEditScope('series')}
+                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                              seriesEditScope === 'series'
+                                ? 'bg-amber-600 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Toda la serie
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        {seriesEditScope === 'single'
+                          ? 'Puedes mover la fecha o extender la duración solo de este ciclo sin alterar los demás.'
+                          : 'Se recalcularán la regla de periodicidad y las fechas para toda la serie.'}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Start Date */}
                     <div>
@@ -1868,7 +1991,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   type="submit"
                   className="px-4 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md shadow-blue-200 transition-colors cursor-pointer"
                 >
-                  {isMicrotaskMode && generateInstances && previewOccurrences.length > 1
+                  {task?.recurrenceSeriesId
+                    ? seriesEditScope === 'single'
+                      ? `Guardar solo ciclo ${task.recurrenceIndex || 1}/${task.recurrenceTotal || '?'}`
+                      : 'Actualizar toda la serie'
+                    : isMicrotaskMode && generateInstances && previewOccurrences.length > 1
                     ? `${isEditing ? 'Segmentar en' : 'Crear'} ${previewOccurrences.length} Microtareas`
                     : recurrenceEnabled && generateInstances && !isEditing && previewOccurrences.length > 1
                     ? `Crear ${previewOccurrences.length} Tareas`
