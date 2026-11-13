@@ -77,10 +77,15 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
 
           {/* Board List */}
           <div className="p-4 space-y-2.5 flex-1 overflow-y-auto">
-            {/* ⭐ Master Board Option (Consolidation of all boards) */}
+            {/* ⭐ Master Board Option (Consolidation of selected boards) */}
             {(() => {
               const isMasterSelected = currentBoardId === 'master';
-              const totalActiveTasks = allTasks.filter((t) => t.status !== 'done').length;
+              const includedBoardsCount = boards.filter((b) => b.includeInMaster !== false).length;
+              const totalActiveTasks = allTasks.filter((t) => {
+                if (t.status === 'done') return false;
+                const b = boards.find((board) => board.id === t.boardId);
+                return !b || b.includeInMaster !== false;
+              }).length;
 
               return (
                 <div
@@ -113,7 +118,7 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-slate-600 truncate mt-0.5">
-                        Suma y consolida las tareas de <strong>todos</strong> tus tableros ({boards.length} tableros)
+                        Consolida tareas de los tableros marcados (<strong>{includedBoardsCount}</strong> de {boards.length})
                       </p>
                     </div>
                   </div>
@@ -134,14 +139,18 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
             })()}
 
             {/* Individual Boards Header */}
-            <div className="pt-2 pb-1 flex items-center justify-between">
+            <div className="pt-2 pb-1 flex items-center justify-between gap-2">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 Tableros Individuales ({boards.length})
+              </span>
+              <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                ✓ = Incluir en Master
               </span>
             </div>
 
             {boards.map((b) => {
               const isSelected = b.id === currentBoardId;
+              const isIncludedInMaster = b.includeInMaster !== false;
               const taskCount = allTasks.filter(
                 (t) => (t.boardId === b.id || (!t.boardId && b.id === 'board-work')) && t.status !== 'done'
               ).length;
@@ -159,9 +168,26 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {/* Checkbox a la izquierda del nombre para incluir/excluir en el Master */}
+                    <label
+                      onClick={(e) => e.stopPropagation()}
+                      title={isIncludedInMaster ? 'Incluido en Tablero Master (clic para excluir)' : 'Excluido de Tablero Master (clic para incluir)'}
+                      className="flex items-center justify-center p-1 -ml-1 rounded-lg hover:bg-indigo-50 cursor-pointer shrink-0"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isIncludedInMaster}
+                        onChange={(e) => {
+                          onUpdateBoard(b.id, b.name, b.description || '', b.color, e.target.checked);
+                        }}
+                        aria-label={`Incluir ${b.name} en Tablero Master`}
+                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                      />
+                    </label>
+
                     <span
-                      className="w-4 h-4 rounded-full shrink-0 shadow-xs"
+                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
                       style={{ backgroundColor: b.color }}
                     />
                     <div className="truncate flex-1">
@@ -170,15 +196,6 @@ export const BoardSelectModal: React.FC<BoardSelectModalProps> = ({
                         {isSelected && (
                           <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-blue-600 text-white">
                             Activo
-                          </span>
-                        )}
-                        {b.includeInMaster !== false ? (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            ⭐ En Master
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-                            No en Master
                           </span>
                         )}
                       </div>
