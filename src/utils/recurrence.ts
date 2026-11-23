@@ -14,49 +14,112 @@ export function addWorkdays(d: Date, workdaysToAdd: number): Date {
   return result;
 }
 
-export function addRecurrenceInterval(d: Date, interval: number, unit: RecurrenceUnit, weekDays?: number[]): Date {
+function stepOnceByUnit(d: Date, interval: number, unit: RecurrenceUnit): Date {
+  const safeInterval = Math.max(1, interval || 1);
   const result = new Date(d);
-
-  // If specific weekdays are specified (e.g. [1, 2, 4, 5] for Mon, Tue, Thu, Fri)
-  if (weekDays && weekDays.length > 0) {
-    let checkDate = new Date(d);
-    checkDate.setDate(checkDate.getDate() + 1);
-    let attempts = 0;
-    while (attempts < 14) {
-      if (weekDays.includes(checkDate.getDay())) {
-        return checkDate;
-      }
-      checkDate.setDate(checkDate.getDate() + 1);
-      attempts++;
-    }
-  }
-
   switch (unit) {
     case 'hours':
-      result.setHours(result.getHours() + interval);
-      break;
+      result.setHours(result.getHours() + safeInterval);
+      return result;
     case 'days':
-      result.setDate(result.getDate() + interval);
-      break;
+      result.setDate(result.getDate() + safeInterval);
+      return result;
     case 'workdays':
-      return addWorkdays(d, interval);
+      return addWorkdays(d, safeInterval);
     case 'weeks':
-      result.setDate(result.getDate() + interval * 7);
-      break;
+      result.setDate(result.getDate() + safeInterval * 7);
+      return result;
     case 'months': {
       const origDay = d.getDate();
-      result.setMonth(result.getMonth() + interval);
+      result.setMonth(result.getMonth() + safeInterval);
       // Evitar salto de mes en días como 31 de enero -> fin de febrero
       if (result.getDate() !== origDay) {
         result.setDate(0);
       }
-      break;
+      return result;
     }
     case 'years':
-      result.setFullYear(result.getFullYear() + interval);
-      break;
+      result.setFullYear(result.getFullYear() + safeInterval);
+      return result;
   }
-  return result;
+}
+
+export function snapToAllowedWeekDay(d: Date, weekDays: number[], includeStartDay: boolean = true): Date {
+  const allowed = new Set(weekDays);
+  const candidate = new Date(d);
+  if (!includeStartDay) {
+    candidate.setDate(candidate.getDate() + 1);
+  }
+  for (let i = 0; i < 14; i++) {
+    if (allowed.has(candidate.getDay())) {
+      return candidate;
+    }
+    candidate.setDate(candidate.getDate() + 1);
+  }
+  return candidate;
+}
+
+export function getEffectiveWeekDays(unit: RecurrenceUnit, weekDays?: number[]): number[] | undefined {
+  if (!weekDays || weekDays.length === 0) return undefined;
+  if (unit === 'workdays') {
+    const workdaysOnly = weekDays.filter((d) => d !== 0 && d !== 6);
+    return workdaysOnly.length > 0 ? workdaysOnly : undefined;
+  }
+  return weekDays;
+}
+
+export function addRecurrenceInterval(d: Date, interval: number, unit: RecurrenceUnit, weekDays?: number[]): Date {
+  const safeInterval = Math.max(1, interval || 1);
+  const effectiveWeekDays = getEffectiveWeekDays(unit, weekDays);
+
+  if (!effectiveWeekDays || effectiveWeekDays.length === 0) {
+    return stepOnceByUnit(d, safeInterval, unit);
+  }
+
+  // En Días o Días Hábiles con días seleccionados:
+  // avanza contando únicamente los días elegibles marcados (op1),
+  // ej. cada 2 días hábiles en [Lun, Mié, Jue, Vie] desde Vie -> Lun (1), Mié (2).
+  if (unit === 'days' || unit === 'workdays') {
+    const allowed = new Set(effectiveWeekDays);
+    const result = new Date(d);
+    let counted = 0;
+    for (let step = 0; step < 400 && counted < safeInterval; step++) {
+      result.setDate(result.getDate() + 1);
+      if (allowed.has(result.getDay())) {
+        counted++;
+      }
+    }
+    return result;
+  }
+
+  // Caso semanal con días específicos (ej. cada 1 semana en Lun/Mié/Vie, o cada 2 semanas en Lun/Jue)
+  if (unit === 'weeks') {
+    if (safeInterval === 1) {
+      return snapToAllowedWeekDay(d, effectiveWeekDays, false);
+    }
+    // Orden lunes-primero (Lun=0 .. Dom=6)
+    const toMonOrder = (day: number) => (day + 6) % 7;
+    const sortedMonOrders = Array.from(new Set(effectiveWeekDays.map(toMonOrder))).sort((a, b) => a - b);
+    const currentMonOrder = toMonOrder(d.getDay());
+    const nextInSameWeek = sortedMonOrders.find((o) => o > currentMonOrder);
+
+    const result = new Date(d);
+    if (nextInSameWeek !== undefined) {
+      result.setDate(result.getDate() + (nextInSameWeek - currentMonOrder));
+    } else {
+      const daysToAdd = safeInterval * 7 - currentMonOrder + sortedMonOrders[0];
+      result.setDate(result.getDate() + daysToAdd);
+    }
+    return result;
+  }
+
+  // Para Horas, Meses o Años con filtro de días específicos:
+  // avanza la unidad solicitada y ajusta al siguiente día permitido si cae fuera.
+  const stepped = stepOnceByUnit(d, safeInterval, unit);
+  if (effectiveWeekDays.includes(stepped.getDay())) {
+    return stepped;
+  }
+  return snapToAllowedWeekDay(stepped, effectiveWeekDays, true);
 }
 
 export function calculateNextOccurrence(
@@ -102,17 +165,8 @@ export function calculateAllOccurrences(
   const durationMs = Math.max(1000 * 60 * 30, end.getTime() - start.getTime());
   const interval = Math.max(1, recurrence.interval || 1);
   const unit = recurrence.unit || 'days';
-
-  const occurrences: OccurrenceDateRange[] = [
-    {
-      startDate: start.toISOString(),
-      endDate: end.toISOString(),
-      index: 1,
-    },
-  ];
-
-  let currentStart = new Date(start);
-  let currentIndex = 1;
+  const effectiveWeekDays = getEffectiveWeekDays(unit, recurrence.weekDays);
+  const hasWeekDays = Boolean(effectiveWeekDays && effectiveWeekDays.length > 0);
 
   // Determinar condición de fin
   const endCondition = recurrence.endCondition || (recurrence.repeatCount ? 'count' : recurrence.repeatUntilDate ? 'until_date' : 'until_date');
@@ -123,7 +177,7 @@ export function calculateAllOccurrences(
       untilTimeMs = new Date(recurrence.repeatUntilDate).getTime();
     } else {
       // Si la fecha de fin de la tarea es mayor que el primer intervalo, usar esa fecha como límite
-      const firstCycleNextMs = addRecurrenceInterval(start, interval, unit, recurrence.weekDays).getTime();
+      const firstCycleNextMs = addRecurrenceInterval(start, interval, unit, effectiveWeekDays).getTime();
       if (end.getTime() > firstCycleNextMs) {
         untilTimeMs = end.getTime();
       } else {
@@ -134,6 +188,28 @@ export function calculateAllOccurrences(
       }
     }
   }
+
+  // Si hay filtro de días específicos y la fecha de inicio no coincide con ninguno,
+  // alinear la primera ocurrencia al primer día permitido dentro del límite (si cabe)
+  let firstStart = new Date(start);
+  if (hasWeekDays && !effectiveWeekDays!.includes(firstStart.getDay())) {
+    const snapped = snapToAllowedWeekDay(firstStart, effectiveWeekDays!, true);
+    if (untilTimeMs === null || snapped.getTime() <= untilTimeMs) {
+      firstStart = snapped;
+    }
+  }
+  const firstEnd = new Date(firstStart.getTime() + durationMs);
+
+  const occurrences: OccurrenceDateRange[] = [
+    {
+      startDate: firstStart.toISOString(),
+      endDate: firstEnd.toISOString(),
+      index: 1,
+    },
+  ];
+
+  let currentStart = new Date(firstStart);
+  let currentIndex = 1;
 
   // Determinar número máximo de ocurrencias según la condición activa
   let maxCount = maxCap;
@@ -418,21 +494,6 @@ export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
     0: 'Dom',
   };
 
-  if (weekDays && weekDays.length > 0) {
-    const daysStr = weekDays.map((d) => dayNamesShort[d]).join(', ');
-    let baseText = `Días específicos: ${daysStr}`;
-    if ((endCondition === 'count' || (!endCondition && repeatCount)) && repeatCount) {
-      baseText += ` · ${repeatCount} repeticiones`;
-    } else if (endCondition === 'until_date' && repeatUntilDate) {
-      const d = new Date(repeatUntilDate);
-      const dateStr = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
-      baseText += ` · Hasta ${dateStr}`;
-    } else if (repeatCount) {
-      baseText += ` · ${repeatCount} repeticiones`;
-    }
-    return baseText;
-  }
-
   const unitMap: Record<RecurrenceUnit, { singular: string; plural: string }> = {
     hours: { singular: 'hora', plural: 'horas' },
     days: { singular: 'día', plural: 'días' },
@@ -442,8 +503,22 @@ export function formatRecurrenceLabel(rule?: RecurrenceRule): string {
     years: { singular: 'año', plural: 'años' },
   };
 
-  const label = interval === 1 ? unitMap[unit].singular : `${interval} ${unitMap[unit].plural}`;
-  let baseText = `Cada ${label}`;
+  let baseText: string;
+  const effectiveWeekDays = getEffectiveWeekDays(unit, weekDays);
+  if (effectiveWeekDays && effectiveWeekDays.length > 0) {
+    const monOrder = (d: number) => (d + 6) % 7;
+    const sortedDays = Array.from(new Set(effectiveWeekDays)).sort((a, b) => monOrder(a) - monOrder(b));
+    const daysStr = sortedDays.map((d) => dayNamesShort[d]).join(', ');
+    if (unit === 'weeks' && (interval || 1) === 1) {
+      baseText = `Días específicos: ${daysStr}`;
+    } else {
+      const label = interval === 1 ? unitMap[unit].singular : `${interval} ${unitMap[unit].plural}`;
+      baseText = `Cada ${label} (solo ${daysStr})`;
+    }
+  } else {
+    const label = interval === 1 ? unitMap[unit].singular : `${interval} ${unitMap[unit].plural}`;
+    baseText = `Cada ${label}`;
+  }
 
   if ((endCondition === 'count' || (!endCondition && repeatCount)) && repeatCount) {
     baseText += ` · ${repeatCount} repeticiones`;
@@ -496,6 +571,10 @@ export function isTaskOccurringOnDate(task: TaskItem, date: Date): boolean {
 
   const interval = Math.max(1, rule.interval || 1);
   const unit = rule.unit;
+
+  if (rule.weekDays && rule.weekDays.length > 0 && !rule.weekDays.includes(date.getDay())) {
+    return false;
+  }
 
   if (unit === 'days') {
     const diffDays = Math.round((startOfDay - initialStartDay) / (24 * 60 * 60 * 1000));
